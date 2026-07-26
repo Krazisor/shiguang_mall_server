@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "skills": {
+    "java-springboot": {
+      "source": "github/awesome-copilot",
+      "sourceType": "github",
+      "skillPath": "skills/java-springboot/SKILL.md",
+      "computedHash": "f1b9c6b1277178fc33e5a612761c1cd1cf6ab5f946d05d69d52026d142c0a0c1"
+    },
+    "sa-token": {
+      "source": "full-stack-skills/java-skills",
+      "sourceType": "github",
+      "skillPath": "skills/sa-token/SKILL.md",
+      "computedHash": "6782d083141766c3e9742ca622b19f52dd4a21f03ca7c6bc05b6b8a513352665"
+    },
+    "sa-token-integration": {
+      "source": "full-stack-skills/java-skills",
+      "sourceType": "github",
+      "skillPath": "skills/sa-token-integration/SKILL.md",
+      "computedHash": "876542534dc296e08e925e63ea637b711a5c50b4b1a9c6bab5aaa66002bf6e36"
+    },
+    "springboot-tdd": {
+      "source": "affaan-m/everything-claude-code",
+      "sourceType": "github",
+      "skillPath": "skills/springboot-tdd/SKILL.md",
+      "computedHash": "37566744c3850a2bc683ea1734c4ecf67d84c7604e6b3df57b76e978479edfc8"
+    }
+  }
+}
