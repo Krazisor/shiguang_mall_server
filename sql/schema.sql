@@ -1,6 +1,12 @@
 -- Shiguang Market current-stage schema
 -- MySQL 8.0.16+ only. Run on an empty database.
 
+CREATE DATABASE IF NOT EXISTS `market`
+    DEFAULT CHARACTER SET utf8mb4
+    DEFAULT COLLATE utf8mb4_0900_ai_ci;
+
+USE `market`;
+
 SET NAMES utf8mb4;
 SET time_zone = '+08:00';
 
