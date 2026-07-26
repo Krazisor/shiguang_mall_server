@@ -18,8 +18,19 @@ spring:
       timeout: 5s
 
 mybatis-plus:
+  mapper-locations: classpath*:/mapper/**/*.xml
   configuration:
     map-underscore-to-camel-case: true
+    jdbc-type-for-null: 'NULL'
+  global-config:
+    banner: false
+    db-config:
+      id-type: auto
+      insert-strategy: not_null
+      update-strategy: not_null
+      where-strategy: not_null
+      logic-delete-value: now()
+      logic-not-delete-value: 'null'
 
 sa-token:
   token-name: satoken
