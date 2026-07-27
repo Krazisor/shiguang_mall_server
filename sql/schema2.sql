@@ -1,5 +1,6 @@
--- Shiguang Market migration 2
+-- Shiguang Market required incremental migration 2
 -- MySQL 8.0.16+ only. Run after schema.sql on database `market`.
+-- Required by the current combined product/API contract, including baseline features.
 -- This migration contains only DML and is safe to run more than once.
 
 USE `market`;
@@ -18,7 +19,7 @@ UPDATE sys_permission
 SET resource = '/api/trades/**'
 WHERE permission_code = 'trade:create';
 
--- Add phase-2 platform permissions without masking unrelated constraint errors.
+-- Add current-contract platform permissions without masking unrelated constraint errors.
 INSERT INTO sys_permission (
     permission_code,
     permission_name,

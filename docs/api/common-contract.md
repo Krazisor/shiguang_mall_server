@@ -2,7 +2,7 @@
 
 ## 1. 适用范围
 
-本文是一期和二期全部 HTTP 接口的公共契约。阶段接口文档只描述业务差异；未重复说明的内容一律继承本文。
+本文是当前完整版本全部 HTTP 接口的公共契约。[基础交易接口分册](phase-1-api.md)和[治理与售后接口分册](phase-2-api.md)按业务主题拆分，二者并集组成当前接口范围；未重复说明的内容一律继承本文。
 
 所有命名 Request/View 的完整字段集合见 [DTO 字段目录](dto-catalog.md)。
 
@@ -25,7 +25,7 @@
 
 ### 3.1 ID
 
-数据库主键为 `BIGINT UNSIGNED`。为避免 JavaScript `Number` 超过安全整数范围，所有 ID 在 JSON 中必须使用十进制字符串：
+数据库主键为 `BIGINT UNSIGNED`，Java 应用实体使用 `Long`。应用层只允许生成和接受 `1..9223372036854775807`（`Long.MAX_VALUE`）范围内的 ID，不得使用数据库 unsigned 范围中超出 Java signed long 的部分。为避免 JavaScript `Number` 超过安全整数范围，所有 ID 在 JSON 中必须使用十进制字符串：
 
 ```json
 {
@@ -147,7 +147,8 @@
 | 401 | `AUTH_TOKEN_EXPIRED` | Token 已过期 |
 | 401 | `AUTH_TOKEN_REPLACED` | Token 已被顶下线或替换 |
 | 401 | `AUTH_TOKEN_KICKED_OUT` | 管理员已踢下线 |
-| 403 | `AUTH_ACCOUNT_DISABLED` | 用户不是 `ACTIVE` 或已软删除 |
+| 403 | `AUTH_ACCOUNT_DISABLED` | 用户为 `DISABLED` 或已软删除 |
+| 403 | `AUTH_ACCOUNT_LOCKED` | 用户为 `LOCKED` |
 | 403 | `AUTH_PERMISSION_DENIED` | 缺少平台或普通用户权限 |
 | 403 | `SHOP_ACCESS_DENIED` | 不是目标店铺有效成员或缺少店铺权限 |
 | 404 | `RESOURCE_NOT_FOUND` | 资源不存在、已软删除或调用方无权知道其存在 |
@@ -203,7 +204,7 @@
 
 ## 8. 幂等规则
 
-以下操作必须提交 `Idempotency-Key`：创建交易、创建/执行支付、模拟充值、库存入库/调整、创建售后、提交退货物流、执行或重试退款。
+以下操作必须提交 `Idempotency-Key`：创建交易、创建/执行支付、模拟充值、库存入库/调整、创建售后、提交退货物流、售后批准、确认退货收货并退款、执行或重试退款。售后批准接口包含可能立即退款的仅退款分支，因此整个接口统一必填，不能由客户端按售后类型决定是否提交。
 
 规则如下：
 

@@ -1,8 +1,8 @@
-# 时光商城一期接口文档
+# 时光商城基础交易接口分册（原一期）
 
 ## 1. 使用说明
 
-本文定义一期全部 HTTP 接口。基础类型、统一响应、鉴权、分页、错误、幂等和并发规则见[统一 API 契约](common-contract.md)。接口返回均包裹在统一响应的 `data` 中，下文只展示 `data` 结构。
+本文按基础交易主题定义当前版本的一部分 HTTP 接口，并与[治理与售后接口分册](phase-2-api.md)合并生效。文件名中的 `phase-1` 仅为历史稳定名称，不表示只执行 `schema.sql` 即可开发或部署。基础类型、统一响应、鉴权、分页、错误、幂等和并发规则见[统一 API 契约](common-contract.md)。接口返回均包裹在统一响应的 `data` 中，下文只展示 `data` 结构。
 
 鉴权缩写：`PUBLIC` 匿名可访问，`LOGIN` 有效登录，`PERM(x)` 平台权限，`SHOP(x)` 目标店铺有效成员及店铺权限，`OWNER` 本人资源。
 
@@ -115,7 +115,7 @@
 }
 ```
 
-字段均去除首尾空白。收件人 `1..64`，电话 `6..32`，省市区各 `1..64`，详细地址 `1..255`。首个地址无论请求值如何都自动成为默认地址。错误：`ADDRESS_NOT_FOUND`、`ADDRESS_NOT_OWNED`。
+字段均去除首尾空白。收件人 `1..64`，电话 `6..32`，省市区各 `1..64`，详细地址 `1..255`。首个地址无论请求值如何都自动成为默认地址。本人地址不存在、已删除或属于其他用户时，对外统一返回 `RESOURCE_NOT_FOUND`；服务内部可以记录具体原因，但不得用错误码暴露归属关系。
 
 ## 4. 公开目录与商品
 
@@ -130,7 +130,7 @@
 | GET | `/api/products` | PUBLIC | `keyword,categoryId,brandId,shopId,minPrice,maxPrice,inStock,page,pageSize,sort` | `Page<ProductCardView>` |
 | GET | `/api/products/{spuId}` | PUBLIC | 无 | `ProductDetailView` |
 
-产品排序白名单：`createdAt,desc`、`salePrice,asc`、`salePrice,desc`、`productName,asc`。`categoryId` 包含该类目及所有启用后代叶子类目的商品。
+品牌列表默认排序为 `brandName,asc`，品牌排序白名单为 `brandName,asc`、`brandCode,asc`；商品列表默认排序为 `createdAt,desc`，商品排序白名单为 `createdAt,desc`、`salePrice,asc`、`salePrice,desc`、`productName,asc`。所有排序均追加稳定次级排序 `id,desc`。`categoryId` 包含该类目及所有启用后代叶子类目的商品。
 
 ### 4.2 目录 DTO
 
@@ -151,13 +151,15 @@
 // CategoryAttributeView
 {
   "id": "411",
+  "categoryId": "401",
   "attributeName": "电池容量",
   "valueType": "NUMBER",
   "unit": "mAh",
   "required": true,
   "filterable": true,
   "options": null,
-  "sortOrder": 1
+  "sortOrder": 1,
+  "status": "ENABLED"
 }
 ```
 
@@ -215,8 +217,14 @@
   "detailHtml": "<p>清洗后的详情</p>",
   "packingList": "主机、数据线",
   "serviceNote": "7 天售后说明",
-  "shop": {},
-  "category": {"id": "401", "categoryName": "手机"},
+  "shop": {
+    "id": "201",
+    "shopNo": "SHOP202607260001",
+    "shopName": "时光数码店",
+    "logoUrl": null,
+    "status": "ACTIVE"
+  },
+  "category": {"id": "401", "categoryCode": "MOBILE_PHONE", "categoryName": "手机"},
   "brand": null,
   "attributes": [
     {"attributeId": "411", "attributeName": "电池容量", "value": "5000", "unit": "mAh"}
@@ -291,7 +299,13 @@
 {
   "shops": [
     {
-      "shop": {},
+      "shop": {
+        "id": "201",
+        "shopNo": "SHOP202607260001",
+        "shopName": "时光数码店",
+        "logoUrl": null,
+        "status": "ACTIVE"
+      },
       "items": [
         {
           "id": "601",
@@ -339,10 +353,27 @@
 ```json
 // CheckoutPreviewView
 {
-  "address": {},
+  "address": {
+    "id": "301",
+    "recipientName": "张三",
+    "recipientPhone": "13800000000",
+    "provinceName": "上海市",
+    "cityName": "上海市",
+    "districtName": "杨浦区",
+    "detailAddress": "延吉中路 100 号",
+    "isDefault": true,
+    "createdAt": "2026-07-20T10:00:00.000+08:00",
+    "updatedAt": "2026-07-26T18:00:00.000+08:00"
+  },
   "shops": [
     {
-      "shop": {},
+      "shop": {
+        "id": "201",
+        "shopNo": "SHOP202607260001",
+        "shopName": "时光数码店",
+        "logoUrl": null,
+        "status": "ACTIVE"
+      },
       "items": [
         {
           "cartItemId": "601",
@@ -433,7 +464,7 @@
 // RechargeRequest
 {
   "amount": "1000.00",
-  "remark": "一期测试充值"
+  "remark": "联调测试充值"
 }
 ```
 
@@ -513,7 +544,13 @@
   "orderNo": "OR202607260001",
   "tradeId": "701",
   "tradeNo": "TR202607260001",
-  "shop": {},
+  "shop": {
+    "id": "201",
+    "shopNo": "SHOP202607260001",
+    "shopName": "时光数码店",
+    "logoUrl": null,
+    "status": "ACTIVE"
+  },
   "orderStatus": "PENDING_SHIPMENT",
   "paymentStatus": "PAID",
   "payableAmount": "7998.00",
@@ -535,7 +572,13 @@
   "orderNo": "OR202607260001",
   "tradeId": "701",
   "tradeNo": "TR202607260001",
-  "shop": {},
+  "shop": {
+    "id": "201",
+    "shopNo": "SHOP202607260001",
+    "shopName": "时光数码店",
+    "logoUrl": null,
+    "status": "ACTIVE"
+  },
   "orderStatus": "PENDING_RECEIPT",
   "paymentStatus": "PAID",
   "itemAmount": "7998.00",
@@ -543,7 +586,14 @@
   "payableAmount": "7998.00",
   "refundAmount": "0.00",
   "buyerRemark": "工作日送货",
-  "address": {},
+  "address": {
+    "recipientName": "张三",
+    "recipientPhone": "13800000000",
+    "provinceName": "上海市",
+    "cityName": "上海市",
+    "districtName": "杨浦区",
+    "detailAddress": "延吉中路 100 号"
+  },
   "shipping": {
     "carrierCode": "SF",
     "carrierName": "顺丰速运",
@@ -601,6 +651,8 @@
 | POST | `/api/shops/{shopId}/products/{spuId}/put-on-shelf` | SHOP(`shop:product:manage`) | 无 | `ShopProductDetailView` |
 | POST | `/api/shops/{shopId}/products/{spuId}/take-off-shelf` | SHOP(`shop:product:manage`) | `ReasonRequest` 可选 | `ShopProductDetailView` |
 
+列表默认排序为 `updatedAt,desc`，`sort` 白名单为 `updatedAt,desc`、`createdAt,desc`、`productName,asc`、`status,asc`，并统一追加稳定次级排序 `id,desc`。
+
 ### 7.2 创建与更新商品
 
 ```json
@@ -650,7 +702,7 @@
 }
 ```
 
-`skuContents` 可省略；提交时只包含本次需要修改的 SKU，`version` 用于逐 SKU 并发校验。任一 SKU 不属于当前 SPU、已删除或版本冲突时，整个内容更新事务回滚。
+`skuContents` 必传；没有 SKU 展示内容需要修改时传空数组 `[]`。非空时只包含本次需要修改的 SKU，`version` 用于逐 SKU 并发校验。任一 SKU 不属于当前 SPU、已删除或版本冲突时，整个内容更新事务回滚。
 
 ```json
 // CreateSkuRequest
@@ -713,12 +765,13 @@
   "availableAfter": 100,
   "lockedAfter": 0,
   "businessType": "MANUAL_INBOUND",
+  "businessNo": "II202607260001",
   "remark": "首批入库",
   "createdAt": "2026-07-26T18:30:15.123+08:00"
 }
 ```
 
-`stockState`：`OUT_OF_STOCK`、`LOW_STOCK`（1..10）、`IN_STOCK`（大于 10）。错误：`SKU_NOT_FOUND`、`SKU_NOT_IN_SHOP`、`INVENTORY_OPERATION_INVALID`。
+`stockState`：`OUT_OF_STOCK`、`LOW_STOCK`（1..10）、`IN_STOCK`（大于 10）。SKU 不存在、已删除或不属于路径店铺时统一返回 `RESOURCE_NOT_FOUND`，不得用错误码暴露店铺归属。其他错误：`INVENTORY_OPERATION_INVALID`。
 
 ## 9. 商家订单履约
 
@@ -750,6 +803,8 @@
 | GET | `/api/platform/shops/{shopId}` | PERM(`platform:shop:manage`) | 无 | `PlatformShopView` |
 | PUT | `/api/platform/shops/{shopId}` | PERM(`platform:shop:manage`) | `UpdateShopRequest` | `PlatformShopView` |
 | POST | `/api/platform/shops/{shopId}/status` | PERM(`platform:shop:manage`) | `ChangeShopStatusRequest` | `PlatformShopView` |
+
+列表默认排序为 `createdAt,desc`，`sort` 白名单为 `createdAt,desc`、`updatedAt,desc`、`shopName,asc`、`status,asc`，并统一追加稳定次级排序 `id,desc`。
 
 ```json
 // CreateShopRequest
@@ -867,7 +922,7 @@
 
 批准时 `reason` 可空，拒绝时必填 `1..500`。`contentVersion` 必须等于待审版本，防止审核旧内容。错误：`PRODUCT_NOT_PENDING_REVIEW`、`PRODUCT_REVIEW_VERSION_CHANGED`。
 
-## 13. 一期错误码补充
+## 13. 基础交易错误码补充
 
 | 模块 | 错误码 |
 | --- | --- |

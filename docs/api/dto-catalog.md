@@ -2,7 +2,7 @@
 
 ## 1. 目的与记法
 
-本文是[一期接口](phase-1-api.md)和[二期接口](phase-2-api.md)中所有命名 DTO 的字段目录。阶段文档中的 JSON 是实例，本文定义字段集合和类型；两者必须同时满足。
+本文是[基础交易接口分册](phase-1-api.md)和[治理与售后接口分册](phase-2-api.md)中所有命名 DTO 的字段目录。分册文档中的 JSON 是实例，本文定义字段集合和类型；两者必须同时满足。
 
 类型记法：
 
@@ -109,7 +109,7 @@
 | --- | --- |
 | `WalletView` | `walletId:Id`、`balance:Money`、`status:WalletStatus`、`version:int`、`updatedAt:Timestamp` |
 | `WalletTransactionView` | `id:Id`、`transactionNo:string`、`transactionType:WalletTransactionType`、`direction:TransactionDirection`、`amount:Money`、`balanceBefore:Money`、`balanceAfter:Money`、`businessType:string`、`businessNo:string`、`remark:string\|null`、`createdAt:Timestamp` |
-| `WalletOperationView` | `WalletTransactionView` 去除 `id`、`businessType`、`businessNo` 后的字段集合；一期充值仍返回 `transactionNo` |
+| `WalletOperationView` | `WalletTransactionView` 去除 `id`、`businessType`、`businessNo` 后的字段集合；充值响应仍返回 `transactionNo` |
 | `PaymentView` | `id:Id`、`paymentNo:string`、`tradeId:Id`、`amount:Money`、`status:PaymentOrderStatus`、`failureReason:string\|null`、`paidAt:Timestamp\|null`、`expiresAt:Timestamp`、`createdAt:Timestamp`、`updatedAt:Timestamp` |
 | `PaymentResultView` | `paymentId:Id`、`paymentNo:string`、`status:PaymentOrderStatus`、`amount:Money`、`paidAt:Timestamp\|null`、`tradeId:Id`、`tradeStatus:TradeStatus`、`walletBalance:Money` |
 | `OrderItemSummaryView` | `productName:string`、`skuName:string`、`imageUrl:string\|null`、`quantity:int` |
@@ -163,7 +163,7 @@
 | `CategoryUpsertRequest` | `parentId:Id\|null`、`categoryName:string`、`categoryCode:string`、`sortOrder:int` |
 | `CategoryAttributeRequest` | `attributeName:string`、`valueType:AttributeValueType`、`unit:string\|null`、`required:boolean`、`filterable:boolean`、`options:string[]\|null`、`sortOrder:int` |
 | `BrandRequest` | `brandName:string`、`brandCode:string`、`logoUrl:string\|null` |
-| `StatusRequest` / `StatusRequest<T>` | `targetStatus:T`、`reason:string\|null`；具体接口限定 `T` |
+| `StatusRequest` | 泛型语义为 `StatusRequest<T>`：`targetStatus:T`、`reason:string\|null`；具体接口限定 `T` |
 | `ReviewDecisionRequest` | `contentVersion:int`、`reason:string\|null`；拒绝时非空 |
 | `ProductGovernanceRequest` | `contentVersion:int`、`reason:string` |
 
@@ -175,7 +175,8 @@
 | `PlatformCategoryView` | `id:Id`、`parentId:Id\|null`、`categoryCode:string`、`categoryName:string`、`sortOrder:int`、`status:EnabledStatus`、`leaf:boolean`、`childrenCount:int`、`attributeCount:int`、`createdAt:Timestamp`、`updatedAt:Timestamp` |
 | `PlatformCategoryNode` | `PlatformCategoryView` + `children:PlatformCategoryNode[]` |
 | `ProductReviewSummaryView` | `spuId:Id`、`spuNo:string`、`productName:string`、`coverUrl:string\|null`、`shop:ShopSummary`、`category:CategoryBrief`、`contentVersion:int`、`submittedAt:Timestamp` |
-| `ProductReviewDetailView` | `ShopProductDetailView` 的受审核内容、SKU、状态与历史；不返回库存操作能力字段 `availableActions` |
+| `ProductReviewSkuView` | `id:Id`、`skuNo:string`、`skuName:string`、`spec:object<string,string>`、`salePrice:Money`、`marketPrice:Money\|null`、`barcode:string\|null`、`imageUrl:string\|null`、`status:EnabledStatus`、`version:int`、`createdAt:Timestamp`、`updatedAt:Timestamp`；不返回库存数量 |
+| `ProductReviewDetailView` | `id:Id`、`spuNo:string`、`productName:string`、`subtitle:string\|null`、`coverUrl:string\|null`、`galleryUrls:string[]`、`detailHtml:string\|null`、`packingList:string\|null`、`serviceNote:string\|null`、`shop:ShopSummary`、`category:CategoryBrief`、`brand:BrandView\|null`、`attributes:ProductAttributeDisplayView[]`、`skus:ProductReviewSkuView[]`、`status:ProductStatus`、`contentVersion:int`、`createdBy:UserSummary`、`updatedBy:UserSummary`、`history:ProductStatusHistoryView[]`、`createdAt:Timestamp`、`updatedAt:Timestamp`；不返回 `stock` 或操作能力字段 |
 
 ## 9. RBAC 与店铺成员
 
@@ -283,7 +284,7 @@
 
 每次修改 DTO 时必须检查：
 
-1. 本文、阶段接口示例和 OpenAPI 是否同步。
+1. 本文、接口分册示例和 OpenAPI 是否同步。
 2. ID、金额和时间是否仍符合统一类型。
 3. 新增响应字段是否有稳定默认值或空值规则。
 4. Request 是否明确 POST/PUT/PATCH 的缺失与 `null` 语义。

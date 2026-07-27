@@ -1,8 +1,8 @@
-# 时光商城二期接口文档
+# 时光商城治理与售后接口分册（原二期）
 
 ## 1. 使用说明
 
-本文定义二期新增接口，并继承[统一 API 契约](common-contract.md)和[一期接口文档](phase-1-api.md)。二期不得改变一期路径、DTO 和错误语义；如需增加响应字段，按兼容变更执行。
+本文按治理、售后和任务主题定义当前版本的一部分接口，并继承[统一 API 契约](common-contract.md)，与[基础交易接口分册](phase-1-api.md)合并生效。文件名中的 `phase-2` 仅为历史稳定名称。跨分册保护规则必须在本文明确列出；其他路径、DTO 和错误语义不得被静默改变，如需增加响应字段，按兼容变更执行。
 
 ## 2. 平台用户与 RBAC
 
@@ -43,12 +43,21 @@
   "id": "101",
   "username": "alice_01",
   "nickname": "Alice",
-  "phone": "138****0000",
-  "email": "a***@example.com",
+  "phoneMasked": "138****0000",
+  "emailMasked": "a***@example.com",
   "avatarUrl": null,
   "status": "ACTIVE",
   "platformRoles": [
-    {"id": "1001", "roleCode": "CUSTOMER", "roleName": "普通用户", "status": "ACTIVE"}
+    {
+      "id": "1001",
+      "roleCode": "CUSTOMER",
+      "roleName": "普通用户",
+      "scopeType": "PLATFORM",
+      "description": "普通用户",
+      "status": "ACTIVE",
+      "createdAt": "2026-07-20T10:00:00.000+08:00",
+      "updatedAt": "2026-07-20T10:00:00.000+08:00"
+    }
   ],
   "lastLoginAt": "2026-07-26T18:30:15.123+08:00",
   "createdAt": "2026-07-20T10:00:00.000+08:00",
@@ -79,7 +88,7 @@
 }
 ```
 
-`roleCode` 格式 `^[A-Z][A-Z0-9_]{2,63}$`。创建后 `roleCode` 和 `scopeType` 不可修改。种子角色允许修改展示名称、说明和授权，但禁止删除；本阶段所有角色都不提供删除接口。
+`roleCode` 格式 `^[A-Z][A-Z0-9_]{2,63}$`。创建后 `roleCode` 和 `scopeType` 不可修改。种子角色允许修改展示名称、说明和授权，但禁止删除；当前范围的所有角色都不提供删除接口。
 
 关键角色 `CUSTOMER`、`SUPER_ADMIN`、`SHOP_ADMIN` 不允许停用。任何平台角色分配、角色停用或权限替换完成后，系统必须仍存在至少一名 `ACTIVE` 用户可通过有效角色获得 `platform:rbac:manage`；否则返回 `LAST_RBAC_ADMIN_REQUIRED`。店铺最后管理员保护由店铺成员接口单独保证。
 
@@ -144,7 +153,12 @@
   "role": {
     "id": "2003",
     "roleCode": "SHOP_ORDER_OPERATOR",
-    "roleName": "店铺订单客服"
+    "roleName": "店铺订单客服",
+    "scopeType": "SHOP",
+    "description": "处理本店订单和售后",
+    "status": "ACTIVE",
+    "createdAt": "2026-07-20T10:00:00.000+08:00",
+    "updatedAt": "2026-07-20T10:00:00.000+08:00"
   },
   "status": "ACTIVE",
   "createdAt": "2026-07-26T18:30:15.123+08:00",
@@ -281,7 +295,7 @@
 }
 ```
 
-`occupied` 包含其他已批准未完成和退款中申请所占额度。若订单已完成，`eligibleUntil=completedAt+7 days`。
+资格查询与创建申请使用同一占用口径：其他 `PENDING` 申请按 `quantity/requestedAmount` 占用，其他 `WAITING_RETURN`、`REFUNDING` 申请按 `approvedQuantity/approvedAmount` 占用；`REJECTED`、`CANCELLED` 不占用，`COMPLETED` 已进入订单明细累计退款字段，不再重复计入 `occupied`。若订单已完成，`eligibleUntil=completedAt+7 days`。
 
 ```json
 // CreateAfterSaleRequest
@@ -323,7 +337,13 @@
   "status": "WAITING_RETURN",
   "refundStatus": "NOT_STARTED",
   "order": {"id": "711", "orderNo": "OR202607260001", "orderStatus": "PENDING_RECEIPT"},
-  "shop": {},
+  "shop": {
+    "id": "201",
+    "shopNo": "SHOP202607260001",
+    "shopName": "时光数码店",
+    "logoUrl": null,
+    "status": "ACTIVE"
+  },
   "item": {
     "id": "721",
     "productName": "示例手机",
@@ -370,7 +390,7 @@
 | --- | --- | --- | --- | --- |
 | GET | `/api/shops/{shopId}/after-sales` | 否 | `status,refundStatus,requestType,keyword,createdFrom,createdTo,page,pageSize` | `Page<ShopAfterSaleSummaryView>` |
 | GET | `/api/shops/{shopId}/after-sales/{afterSaleId}` | 否 | 无 | `ShopAfterSaleDetailView` |
-| POST | `/api/shops/{shopId}/after-sales/{afterSaleId}/approve` | 建议 | `ApproveAfterSaleRequest` | `ShopAfterSaleDetailView` |
+| POST | `/api/shops/{shopId}/after-sales/{afterSaleId}/approve` | 必填 | `ApproveAfterSaleRequest` | `ShopAfterSaleDetailView` |
 | POST | `/api/shops/{shopId}/after-sales/{afterSaleId}/reject` | 建议 | `RejectAfterSaleRequest` | `ShopAfterSaleDetailView` |
 | POST | `/api/shops/{shopId}/after-sales/{afterSaleId}/confirm-return-received` | 必填 | `ConfirmReturnReceivedRequest` | `ShopAfterSaleDetailView` |
 | POST | `/api/shops/{shopId}/after-sales/{afterSaleId}/refund/retry` | 必填 | `RetryRefundRequest` | `ShopAfterSaleDetailView` |
@@ -387,7 +407,7 @@
 }
 ```
 
-批准数量和金额必须不超过申请值，也不能与其他申请合计超额。服务端在锁内重新计算。仅退款批准会立即启动退款，响应可能是 `COMPLETED/SUCCESS` 或 `REFUNDING/FAILED`。
+批准数量和金额必须不超过申请值。服务端锁定售后、子订单和订单明细后，扣除其他 `WAITING_RETURN`、`REFUNDING` 等已批准且未结束申请占用的批准数量/金额，再复核本次批准量；`PENDING` 申请在创建阶段已经相互占用，但不能以未审核申请值替代本次批准上限计算。仅退款批准会立即启动退款，因此本接口必须提交 `Idempotency-Key`，响应可能是 `COMPLETED/SUCCESS` 或 `REFUNDING/FAILED`。
 
 ```json
 // RejectAfterSaleRequest
@@ -423,7 +443,7 @@
 
 错误：`AFTER_SALE_NOT_PENDING`、`AFTER_SALE_APPROVAL_EXCEEDED`、`RETURN_NOT_SHIPPED`、`RETURN_ALREADY_RECEIVED`、`REFUND_NOT_RETRYABLE`、`REFUND_EXECUTION_FAILED`。
 
-二期启用售后后，一期的发货和确认收货接口增加活跃售后保护：`POST /api/shops/{shopId}/orders/{orderId}/ship`、`POST /api/orders/{orderId}/complete` 遇到本订单 `PENDING`、`WAITING_RETURN`、`REFUNDING` 售后时返回 `409 ORDER_HAS_ACTIVE_AFTER_SALE`。自动确认收货任务使用相同判断。
+当前完整版本启用售后后，基础交易分册的发货和确认收货接口同时应用活跃售后保护：`POST /api/shops/{shopId}/orders/{orderId}/ship`、`POST /api/orders/{orderId}/complete` 遇到本订单 `PENDING`、`WAITING_RETURN`、`REFUNDING` 售后时返回 `409 ORDER_HAS_ACTIVE_AFTER_SALE`。自动确认收货任务使用相同判断。
 
 ## 8. 平台运营只读查询
 
@@ -459,11 +479,11 @@
 }
 ```
 
-`batchSize` 范围 `1..500`。对账接口 `dryRun` 固定为 `true`；本阶段不支持自动修复。生产环境未开启时返回 `404`，避免暴露管理面。
+`batchSize` 范围 `1..500`。对账接口 `dryRun` 固定为 `true`；当前范围不支持自动修复。生产环境未开启时返回 `404`，避免暴露管理面。
 
-## 10. 二期权限种子补充
+## 10. 当前版本权限增量
 
-为使本文路径与数据库 RBAC 完全一致，`schema2.sql` 增量加入：
+为使两个接口分册的路径与数据库 RBAC 完全一致，当前版本必须在 `schema.sql` 后执行 `schema2.sql`，由该增量加入：
 
 | 权限代码 | 作用域 | 资源 |
 | --- | --- | --- |
@@ -473,7 +493,7 @@
 
 `SUPER_ADMIN` 由 `schema2.sql` 显式补齐上述三项权限；`PLATFORM_PRODUCT_AUDITOR` 获得 `platform:catalog:manage`，以负责类目、类目属性模板和品牌基础资料。其余角色默认不获得新增权限，后续可由超级管理员在角色授权页面分配。
 
-## 11. 二期错误码补充
+## 11. 治理与售后错误码补充
 
 | 模块 | 错误码 |
 | --- | --- |

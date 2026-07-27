@@ -2,7 +2,7 @@
 
 ## 1. 目标
 
-本文保证前端和后端在接口实现尚未完成时可以并行开发，并在联调阶段以契约而不是口头约定判断对错。适用于一期和二期；发生冲突时，[统一 API 契约](../api/common-contract.md)和对应阶段接口文档优先。
+本文保证前端和后端在接口实现尚未完成时可以并行开发，并在联调阶段以契约而不是口头约定判断对错。适用于当前完整版本的两个功能分册；发生冲突时，[统一 API 契约](../api/common-contract.md)和对应接口分册优先。两名后端人员之间的领域拆分、跨线端口和集成顺序见[后端双线并行开发规范](backend-dual-track-development.md)。
 
 独立开发的含义是：
 
@@ -12,23 +12,30 @@
 
 ## 2. 契约基线
 
-### 2.1 一期冻结文件
+### 2.1 当前完整契约文件
 
 1. `docs/product/product-research-and-scope.md`
 2. `docs/product/phase-1-requirements.md`
-3. `docs/api/common-contract.md`
-4. `docs/api/phase-1-api.md`
-5. `docs/database/phase-1-design.md`
-6. `sql/schema.sql`
+3. `docs/product/phase-2-requirements.md`
+4. `docs/api/common-contract.md`
+5. `docs/api/dto-catalog.md`
+6. `docs/api/phase-1-api.md`
+7. `docs/api/phase-2-api.md`
+8. `docs/database/phase-1-design.md`
+9. `docs/development/backend-dual-track-development.md`
+10. `sql/schema.sql`
+11. `sql/schema2.sql`
 
-### 2.2 二期增量文件
+`phase-1`、`phase-2` 文件名仅代表功能分册。上述文件共同构成同一份当前契约，不能只冻结基础交易分册后忽略治理与售后对发货、收货、退款和权限的约束。
 
-1. `docs/product/phase-2-requirements.md`
-2. `docs/api/phase-2-api.md`
-3. `sql/schema2.sql`
-4. 一期冻结文件的兼容性补充
+### 2.2 数据库迁移前置
 
-开发开始前，由前端、后端和测试各指定一名契约负责人，共同确认阶段文件的 Git 提交号。之后所有缺陷必须先判断是“实现不符合契约”还是“契约需要变更”。
+- `schema.sql` 是已经发布的不可回写基线，不得为了当前需求直接修改其历史内容。
+- `schema2.sql` 是当前完整版本必要增量，不只服务治理与售后；基础交易中的平台目录权限同样依赖它。
+- 新空库必须执行 `schema.sql -> schema2.sql`；已执行基线的存量库只执行尚未应用的 `schema2.sql` 及后续迁移。
+- 后续变更继续新增编号迁移，不得重新执行或覆盖已经在服务器执行过的脚本。
+
+开发开始前，由前端、后端和测试各指定一名契约负责人，共同确认上述契约文件的 Git 提交号。之后所有缺陷必须先判断是“实现不符合契约”还是“契约需要变更”。
 
 ## 3. 职责边界
 
@@ -56,7 +63,7 @@ flowchart LR
     Frontend --> Joint["按接口清单逐项联调"]
     Env --> Joint
     Joint --> E2E["跨模块端到端验收"]
-    E2E --> Release["阶段发布"]
+    E2E --> Release["当前版本发布"]
 ```
 
 ### 4.1 契约冻结
@@ -91,7 +98,7 @@ flowchart LR
 
 ### 4.3 后端并行开发
 
-后端按领域包组织，例如 `order/controller`、`order/service`、`order/dto`、`order/mapper`。建议顺序：
+后端按领域包组织，例如 `order/controller`、`order/service`、`order/dto`、`order/mapper`。两名后端分别按[后端双线并行开发规范](backend-dual-track-development.md)领取 A/B 线，跨线能力只通过冻结端口。每条线建议顺序：
 
 1. 定义 Request/Response DTO 和 Bean Validation。
 2. 定义业务错误码和全局异常映射。
@@ -168,7 +175,7 @@ Content-Type: application/json
 | `shop_a_inventory` | `CUSTOMER` | A 店库存人员 | 库存、发货测试 |
 | `shop_b_admin` | `CUSTOMER` | B 店 `SHOP_ADMIN` | 跨店隔离测试 |
 
-一期固定业务数据：
+基础交易固定业务数据：
 
 | 数据 | 状态 | 用途 |
 | --- | --- | --- |
@@ -180,7 +187,7 @@ Content-Type: application/json
 | 待审商品 | `PENDING_REVIEW` | 平台审核 |
 | 买家 A 钱包 | 可覆盖一次成功交易 | 支付成功 |
 
-二期增加：待发货订单、待收货订单、已完成 7 天内订单、部分已退款明细、`PENDING` 售后、`WAITING_RETURN` 售后、`REFUNDING/FAILED` 售后。
+治理与售后场景增加：待发货订单、待收货订单、已完成 7 天内订单、部分已退款明细、`PENDING` 售后、`WAITING_RETURN` 售后、`REFUNDING/FAILED` 售后。
 
 测试数据 ID 在环境之间可以不同，测试应通过业务编号或种子别名获取，不能硬编码数据库自增 ID。
 
@@ -255,7 +262,7 @@ Content-Type: application/json
 | 单元测试 | 金额显示、枚举文案、权限判断、表单校验、API 错误映射 |
 | 组件测试 | 加载、空、错误、禁用、分页、弹窗确认、并发冲突 |
 | Mock 流程 | 加购到支付、商品审核到上架、发货到收货、售后到退款 |
-| E2E | 使用真实联调后端完成阶段验收场景 |
+| E2E | 使用真实联调后端完成两个功能分册的验收场景 |
 
 ### 9.2 后端
 
@@ -331,13 +338,13 @@ Content-Type: application/json
 - 数据库约束与 API 动作冲突：停止联调，由后端和产品共同修订，不能绕过约束。
 - 前端希望增加纯展示字段：优先在响应 DTO 中新增派生字段，不反向污染数据库。
 
-## 13. 阶段完成定义
+## 13. 当前版本完成定义
 
-前后端可以声明阶段独立开发完成，必须同时满足：
+前后端可以声明当前版本独立开发完成，必须同时满足：
 
 - 文档中的全部接口有前端 API Client 和后端 Controller 对应。
 - 前端在 Mock 下通过完整业务流程，且错误场景可演示。
 - 后端在无前端条件下通过契约、集成和并发测试。
 - 共享环境逐接口联调完成，无未确认的字段或状态语义。
-- 阶段产品验收场景通过真实 API 的端到端测试。
+- 两个产品分册的验收场景均通过真实 API 的端到端测试。
 - 没有通过临时硬编码、直接改库或关闭约束来完成演示。
