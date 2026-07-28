@@ -3,6 +3,9 @@ spring:
     import: optional:file:.env[.properties]
   application:
     name: shiguang_market
+  jackson:
+    deserialization:
+      fail-on-unknown-properties: true
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
     url: ${DB_URL}
@@ -43,3 +46,13 @@ sa-token:
   is-read-body: false
   is-read-cookie: false
   is-log: false
+
+market:
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://localhost:3000}
+  trade:
+    payment-timeout-minutes: ${TRADE_PAYMENT_TIMEOUT_MINUTES:30}
+  idempotency:
+    ttl-hours: ${IDEMPOTENCY_TTL_HOURS:24}
+  content:
+    allow-local-http: ${CONTENT_ALLOW_LOCAL_HTTP:false}
