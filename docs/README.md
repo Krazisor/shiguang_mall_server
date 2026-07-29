@@ -10,14 +10,15 @@
 | 2 | [基础交易功能分册（原一期）](product/phase-1-requirements.md) | 产品、前端、后端、测试 | 正向交易闭环及对应验收标准 |
 | 3 | [治理与售后功能分册（原二期）](product/phase-2-requirements.md) | 产品、前端、后端、测试 | 权限治理、售后退款、审计与自动任务 |
 | 4 | [统一 API 契约](api/common-contract.md) | 前端、后端、测试 | URL、鉴权、响应、分页、金额、时间、错误、幂等和并发约定 |
-| 5 | [DTO 字段目录](api/dto-catalog.md) | 前端、后端、测试 | 全部请求/响应字段、类型、空值和复用关系 |
+| 5 | [DTO 字段目录](api/dto-catalog.md) | 前端、后端、测试 | 全部请求/响应字段、必填性、空值、边界和组合约束 |
 | 6 | [基础交易接口分册（原一期）](api/phase-1-api.md) | 前端、后端、测试 | 正向交易相关 HTTP 接口、DTO 和业务错误 |
 | 7 | [治理与售后接口分册（原二期）](api/phase-2-api.md) | 前端、后端、测试 | 治理、售后、任务相关 HTTP 接口、DTO 和业务错误 |
 | 8 | [前后端独立开发规范](development/frontend-backend-parallel-development.md) | 前端、后端、测试 | 契约冻结、Mock、联调、验收数据和变更流程 |
 | 9 | [后端双线并行开发规范](development/backend-dual-track-development.md) | 两名后端、测试 | 共享基座、领域归属、跨线端口、测试和合并顺序 |
-| 10 | [数据库设计规范](database/phase-1-design.md) | 后端、测试、DBA | 26 张表、字段、约束、状态机、事务和锁顺序 |
-| 11 | [`schema.sql`](../sql/schema.sql) | 后端、DBA | MySQL 8.0.16+ 空库初始化物理结构及 RBAC 种子数据，不回写历史发布内容 |
-| 12 | [`schema2.sql`](../sql/schema2.sql) | 后端、DBA | 当前完整版本必需的增量迁移，可重复执行 |
+| 10 | [后端共享基础设施复用与扩展规范](development/backend-shared-infrastructure-guide.md) | 后端、测试 | Sa-Token、统一响应、异常、幂等、安全工具、PATCH、分层和测试规范 |
+| 11 | [数据库设计规范](database/phase-1-design.md) | 后端、测试、DBA | 26 张表、字段、约束、状态机、事务和锁顺序 |
+| 12 | [`schema.sql`](../sql/schema.sql) | 后端、DBA | MySQL 8.0.16+ 空库初始化物理结构及 RBAC 种子数据，不回写历史发布内容 |
+| 13 | [`schema2.sql`](../sql/schema2.sql) | 后端、DBA | 当前完整版本必需的增量迁移，可重复执行 |
 
 ## 2. 当前版本与开发阶段
 

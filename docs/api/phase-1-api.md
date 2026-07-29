@@ -2,7 +2,7 @@
 
 ## 1. 使用说明
 
-本文按基础交易主题定义当前版本的一部分 HTTP 接口，并与[治理与售后接口分册](phase-2-api.md)合并生效。文件名中的 `phase-1` 仅为历史稳定名称，不表示只执行 `schema.sql` 即可开发或部署。基础类型、统一响应、鉴权、分页、错误、幂等和并发规则见[统一 API 契约](common-contract.md)。接口返回均包裹在统一响应的 `data` 中，下文只展示 `data` 结构。
+本文按基础交易主题定义当前版本的一部分 HTTP 接口，并与[治理与售后接口分册](phase-2-api.md)合并生效。文件名中的 `phase-1` 仅为历史稳定名称，不表示只执行 `schema.sql` 即可开发或部署。基础类型、统一响应、鉴权、分页、错误、幂等和并发规则见[统一 API 契约](common-contract.md)，所有命名 DTO 的精确字段、可省略性和 `null` 语义见[DTO 字段目录](dto-catalog.md)。接口返回均包裹在统一响应的 `data` 中，下文只展示 `data` 结构。
 
 鉴权缩写：`PUBLIC` 匿名可访问，`LOGIN` 有效登录，`PERM(x)` 平台权限，`SHOP(x)` 目标店铺有效成员及店铺权限，`OWNER` 本人资源。
 
@@ -30,6 +30,8 @@
   "email": "alice@example.com"
 }
 ```
+
+`username` 必须符合 `^[A-Za-z][A-Za-z0-9_]{3,63}$`；密码长度为 `8..72` 且至少包含一个字母和一个数字；昵称去除首尾空白后为 `1..64`。`phone`、`email` 均可省略或为 `null`，非空时手机号长度为 `6..32`，邮箱必须符合邮箱格式且最大 128 字符。
 
 ```json
 // LoginRequest
@@ -86,7 +88,7 @@
 }
 ```
 
-`UpdateProfileRequest` 可提交 `nickname`、`phone`、`email`、`avatarUrl`。`nickname` 必填时长度 `1..64`；手机号、邮箱和头像允许显式 `null` 清空。
+`UpdateProfileRequest` 至少提交 `nickname`、`phone`、`email`、`avatarUrl` 中的一个字段。字段缺失表示不修改；`nickname` 出现时不可为 `null`，去除首尾空白后长度为 `1..64`；手机号、邮箱和头像允许显式 `null` 清空，空白手机号或邮箱也归一化为 `null`。非空头像只允许符合统一内容安全规则的图片 URL。
 
 ### 2.3 业务错误
 
@@ -273,6 +275,8 @@
 
 重复加购按“原数量 + 请求数量”计算，超过 999 返回 `CART_QUANTITY_LIMIT_EXCEEDED`，不会截断。
 
+`quantity` 必须为 `1..999`，`skuId` 必须为正数十进制 ID 字符串；ID 格式错误返回 `BAD_REQUEST`。
+
 ```json
 // UpdateCartItemRequest
 {
@@ -281,7 +285,7 @@
 }
 ```
 
-两个字段至少传一个。`quantity` 不允许 `null`；`selected` 不允许 `null`。
+两个字段至少传一个。字段缺失表示不修改；`quantity` 不允许 `null` 且必须为 `1..999`；`selected` 不允许 `null`。
 
 ```json
 // UpdateCartSelectionRequest
@@ -291,7 +295,7 @@
 }
 ```
 
-传空数组表示不修改；全选由前端传当前购物车全部有效项 ID，后端仍逐项校验归属。
+`cartItemIds` 和 `selected` 都必须出现，`cartItemIds` 不可包含重复 ID。传空数组表示不修改；全选由前端传当前购物车全部有效项 ID，后端仍逐项校验归属。
 
 ### 5.2 购物车视图
 
@@ -348,7 +352,7 @@
 }
 ```
 
-`cartItemIds` 缺失时使用当前所有 `selected=true` 项；显式数组必须非空且去重。`addressId` 在预览时可为 `null`，此时返回默认地址或 `null`；正式下单必须非空。备注每店最多 500 字。
+`cartItemIds` 缺失时使用当前所有 `selected=true` 项；显式数组必须非空且去重。`addressId` 可省略或显式为 `null`，两种情况都尝试读取默认地址；没有默认地址时返回 `address=null`。`shopRemarks` 可省略或为 `null`，对象键必须是店铺 ID 字符串；每个实际结算店铺的备注最多 500 字。预览请求与正式下单请求的字段差异以 DTO 字段目录为准。
 
 ```json
 // CheckoutPreviewView
@@ -415,7 +419,7 @@
 | GET | `/api/trades/{tradeId}` | LOGIN/OWNER | 否 | 无 | `TradeDetailView` |
 | POST | `/api/trades/{tradeId}/cancel` | LOGIN/OWNER | 建议 | `CancelTradeRequest` | `TradeDetailView` |
 
-`CreateTradeRequest` 与结算预览请求结构一致，但 `addressId` 必填。后端不接受金额、价格、运费、商品名或店铺名。
+`CreateTradeRequest` 的完整字段为：`cartItemIds?:Id[]`、`addressId:Id`、`shopRemarks?:object<Id,string>|null`。`addressId` 必须是本人有效地址且不可省略或为 `null`；`cartItemIds` 缺失时使用当前已选择项，显式数组必须非空且去重；备注规则与预览一致。后端不接受金额、价格、运费、商品名或店铺名；任一结算项不存在、不属于本人、不可购买或库存不足时返回 `422 CHECKOUT_ITEMS_INVALID`，整个下单事务回滚。
 
 ```json
 // CancelTradeRequest
@@ -467,6 +471,8 @@
   "remark": "联调测试充值"
 }
 ```
+
+`amount` 必须是两位小数字符串，取值范围为 `0.01..100000.00`。`remark` 可省略、为 `null` 或字符串，非空时最大 500 字符；充值金额和余额均由后端使用十进制定点数计算。
 
 ```json
 // WalletView
@@ -653,6 +659,8 @@
 
 列表默认排序为 `updatedAt,desc`，`sort` 白名单为 `updatedAt,desc`、`createdAt,desc`、`productName,asc`、`status,asc`，并统一追加稳定次级排序 `id,desc`。
 
+商品下架的整个请求体可以省略；提供请求体时，`reason` 也可以省略或为 `null`，非空值长度为 `1..500`。请求体省略、`{}` 和 `{"reason":null}` 都表示未提供下架原因。
+
 ### 7.2 创建与更新商品
 
 ```json
@@ -683,9 +691,11 @@
 }
 ```
 
-至少一个 SKU。`spec` 必须为非空字符串键值对象，键和值长度 `1..64`；后端负责 NFC、排序、规范 JSON 和 SHA-256。创建商品、属性、SKU、库存 0 记录和 `CREATE` 历史在同一事务。
+`categoryId`、`productName`、`galleryUrls`、`attributes`、`skus` 必须出现，`brandId` 和其他可空内容字段可以省略或为 `null`。`productName` 为 `1..255`，副标题最大 500；`galleryUrls` 最多 10 个、不可重复且可传空数组；`attributes` 可传空数组，但所选类目的必填属性必须完整提交且同一属性不可重复；至少一个 SKU。详情 HTML 清洗后最大 1,000,000 字符，包装清单和服务说明各最大 65,535 字符，所有图片地址遵循统一 URL 安全规则。
 
-`UpdateProductContentRequest` 字段与创建请求相同，但不含新建 `skus`，并额外要求 `contentVersion`。它可以携带 `skuContents` 数组更新已有 SKU 的 `skuName` 和 `imageUrl`；这两项属于受审核展示内容。已有 SKU 的 `spec` 永远不可修改。销售规格变化通过创建新 SKU、禁用旧 SKU 实现，避免改变订单和购物车引用身份。
+SKU 名称为 `1..255`；`spec` 必须为 1..10 项的非空字符串键值对象，键和值经 trim 和 NFC 规范化后长度各为 `1..64`。销售价必须是大于 0 的两位小数字符串；市场价可省略或为 `null`，非空时必须不低于销售价；条码最大 64，空白条码归一化为 `null`。后端负责规格排序、规范 JSON 和 SHA-256。创建商品、属性、SKU、库存 0 记录和 `CREATE` 历史在同一事务。
+
+`UpdateProductContentRequest` 完整包含 `categoryId`、`brandId`、`productName`、`subtitle`、`coverUrl`、`galleryUrls`、`detailHtml`、`packingList`、`serviceNote`、`attributes`、`contentVersion`、`skuContents`，不接受新建 `skus`。这是完整 PUT：内容字段约束与创建请求相同，可空内容字段省略或为 `null` 都表示清空；`contentVersion>=0` 且必须等于当前商品版本。它可以携带 `skuContents` 数组更新已有 SKU 的 `skuName` 和 `imageUrl`，其中 `imageUrl` 省略或为 `null` 都会清空该 SKU 图片；这两项属于受审核展示内容。已有 SKU 的 `spec` 永远不可修改。销售规格变化通过创建新 SKU、禁用旧 SKU 实现，避免改变订单和购物车引用身份。
 
 ```json
 // UpdateProductContentRequest 中的 skuContents
@@ -719,6 +729,8 @@
 
 新增 SKU 属于销售规格变化：只允许 SPU 当前为 `DRAFT`、`REJECTED`、`OFF_SHELF`；成功后 `contentVersion + 1`、状态进入 `DRAFT` 并写 `CONTENT_CHANGED` 历史，所以响应返回完整 `ShopProductDetailView`。同一 SPU 已存在相同规范化规格时返回 `SKU_SPEC_DUPLICATED`，包括已软删除记录；需要恢复原 SKU，不得重复创建。
 
+`CreateSkuRequest` 完整包含 `skuName`、`spec`、`salePrice`、`marketPrice`、`barcode`、`imageUrl`、`contentVersion`；前六项约束与创建商品中的 SKU 相同，`contentVersion>=0` 且必须等于当前商品内容版本。
+
 ```json
 // UpdateSkuRequest
 {
@@ -730,11 +742,13 @@
 }
 ```
 
-普通 SKU 更新只允许 `salePrice`、`marketPrice`、`barcode` 和 `status`；这些字段不触发内容审核。所有业务字段可选，但 `version` 必填且至少有一个业务字段。`skuName`、`imageUrl` 只能通过受审核的商品内容更新修改。`UpdateProductContentRequest` 与新增 SKU 一样只接受 `DRAFT`、`REJECTED`、`OFF_SHELF`；在售商品必须先下架。错误：`CATEGORY_NOT_LEAF`、`CATEGORY_DISABLED`、`BRAND_DISABLED`、`PRODUCT_REQUIRED_ATTRIBUTE_MISSING`、`PRODUCT_ATTRIBUTE_INVALID`、`SKU_SPEC_DUPLICATED`、`PRODUCT_NOT_EDITABLE`。
+普通 SKU 更新只允许 `salePrice`、`marketPrice`、`barcode` 和 `status`；这些字段不触发内容审核。所有业务字段可选，但 `version` 必填、必须 `>=0` 且至少提交一个业务字段。业务字段缺失表示不修改；`salePrice` 和 `status` 出现时不允许 `null`，`marketPrice` 和 `barcode` 可显式 `null` 清空；非空条码最大 64，空白条码也归一化为 `null`。更新后的销售价必须大于 0，非空市场价必须不低于销售价。`skuName`、`imageUrl` 只能通过受审核的商品内容更新修改。`UpdateProductContentRequest` 与新增 SKU 一样只接受 `DRAFT`、`REJECTED`、`OFF_SHELF`；在售商品必须先下架。错误：`CATEGORY_NOT_LEAF`、`CATEGORY_DISABLED`、`BRAND_DISABLED`、`PRODUCT_REQUIRED_ATTRIBUTE_MISSING`、`PRODUCT_ATTRIBUTE_INVALID`、`SKU_SPEC_DUPLICATED`、`PRODUCT_NOT_EDITABLE`。
 
 ### 7.3 商家商品视图
 
 `ShopProductDetailView` 在公开详情字段基础上额外返回 `status`、`contentVersion`、`createdBy`、`updatedBy`、完整 SKU 状态/版本/库存和 `history`。受审核内容不得使用公开接口读取草稿。
+
+需要注意，`ShopProductDetailView.skus` 的元素类型是 `ShopSkuView`，不是公开详情中的 `PublicSkuView`；它包含条码、乐观锁版本和库存视图。完整且无字段覆盖歧义的结构见 DTO 字段目录。
 
 提交审核前后端校验：内容必填、至少一个未删除且启用 SKU、所有必填属性有效。上架前再校验店铺 `ACTIVE`、至少一个启用 SKU 且可用库存大于 0。
 
@@ -753,6 +767,8 @@
   "remark": "首批入库"
 }
 ```
+
+`quantity` 必须为正整数，增加后库存数量不得超过 `int` 上限；`remark` 可省略或为 `null`，最大 500 字符。
 
 ```json
 // InventoryOperationView
@@ -820,6 +836,8 @@
 
 店铺号由后端生成。`adminUsername` 必须精确匹配一个有效用户；后端解析用户 ID，并保证该用户成为新店首位 `SHOP_ADMIN`。创建成功状态默认 `PENDING`，平台再通过状态动作改为 `ACTIVE`。
 
+`shopName` 去除首尾空白后为 `1..128`；`logoUrl` 可空，非空时遵循图片 URL 安全规则；`description`、`contactName`、`contactPhone` 分别最大 500、64、32。`UpdateShopRequest` 不含 `adminUsername`，并采用完整 PUT 语义：`shopName` 必须提交，可空字段缺失或显式 `null` 都会保存为 `null`。
+
 ```json
 // ChangeShopStatusRequest
 {
@@ -827,6 +845,8 @@
   "reason": "资料核验通过"
 }
 ```
+
+`targetStatus` 和 `reason` 都必须提交；`reason` 为非空白字符串且最大 500 字符。
 
 允许：`PENDING -> ACTIVE|CLOSED`、`ACTIVE -> SUSPENDED|CLOSED`、`SUSPENDED -> ACTIVE|CLOSED`；`CLOSED` 终态。关闭前必须没有未完结订单和售后，状态矩阵见统一 API 契约。店铺状态变更不会自动改 SPU 状态，但公开购买条件会立即失效。
 
@@ -853,7 +873,7 @@
 }
 ```
 
-根类目 `parentId=null`。错误：`CATEGORY_CODE_ALREADY_EXISTS`、`CATEGORY_CYCLE_DETECTED`、`CATEGORY_HAS_ENABLED_CHILDREN`、`CATEGORY_IN_USE`。
+根类目可以省略 `parentId` 或提交 `parentId=null`。`categoryName` 为 `1..64`；`categoryCode` 必须符合 `^[A-Z][A-Z0-9_]{1,63}$`；`sortOrder` 为整数。错误：`CATEGORY_CODE_ALREADY_EXISTS`、`CATEGORY_CYCLE_DETECTED`、`CATEGORY_HAS_ENABLED_CHILDREN`、`CATEGORY_IN_USE`。
 
 `categoryCode` 创建后不可修改；PUT 必须回传当前值，变更返回 `IMMUTABLE_FIELD_CHANGED`。把某类目作为新父类目前，后端必须确认它没有属性模板且没有 SPU 引用，否则返回 `CATEGORY_PARENT_NOT_EXTENSIBLE`。禁用父类目前必须先禁用全部后代，避免公开类目树出现孤儿节点。
 
@@ -879,7 +899,7 @@
 }
 ```
 
-只有叶子类目允许新增属性。已有 SPU 使用的属性模板不得更改 `valueType`；可编辑名称、单位、过滤标记、排序和状态。将可选项移除前必须确认没有现有属性值使用。
+`attributeName` 为 `1..64`，`unit` 可省略或为 `null`、最大 32。`valueType=OPTION` 时必须提交非空、不重复的 `options`，每项去除首尾空白后为 `1..64`；非 `OPTION` 类型必须省略 `options` 或提交 `null`，提交空数组也会被拒绝。只有叶子类目允许新增属性。已有 SPU 使用的属性模板不得更改 `valueType`；可编辑名称、单位、过滤标记、排序和状态。将可选项移除前必须确认没有现有属性值使用。
 
 ### 11.3 品牌
 
@@ -901,7 +921,7 @@
 
 错误：`BRAND_CODE_ALREADY_EXISTS`、`BRAND_IN_USE`。停用不需要解除历史引用。
 
-`brandCode` 创建后不可修改；PUT 必须回传当前值，变更返回 `IMMUTABLE_FIELD_CHANGED`。
+`brandName` 为 `1..128`；`brandCode` 必须符合 `^[A-Z][A-Z0-9_]{1,63}$`，创建后不可修改，PUT 必须回传当前值，变更返回 `IMMUTABLE_FIELD_CHANGED`；`logoUrl` 可省略或为 `null`，非空时遵循图片 URL 安全规则。目录和品牌 `StatusRequest` 的 `targetStatus` 必填，`reason` 可省略或为 `null`、最大 500 字符。
 
 ## 12. 平台商品审核
 
@@ -920,7 +940,7 @@
 }
 ```
 
-批准时 `reason` 可空，拒绝时必填 `1..500`。`contentVersion` 必须等于待审版本，防止审核旧内容。错误：`PRODUCT_NOT_PENDING_REVIEW`、`PRODUCT_REVIEW_VERSION_CHANGED`。
+`contentVersion` 必填且必须为非负整数，并等于待审版本，防止审核旧内容。批准时 `reason` 可省略或为 `null`；拒绝时去除首尾空白后必填 `1..500`。错误：`PRODUCT_NOT_PENDING_REVIEW`、`PRODUCT_REVIEW_VERSION_CHANGED`。
 
 ## 13. 基础交易错误码补充
 
