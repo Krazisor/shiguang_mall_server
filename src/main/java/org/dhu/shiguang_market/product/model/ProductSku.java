@@ -1,6 +1,7 @@
 package org.dhu.shiguang_market.product.model;
 
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.FieldStrategy;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableLogic;
@@ -26,8 +27,11 @@ public class ProductSku {
     private Map<String, String> specJson;
     private String specKey;
     private BigDecimal salePrice;
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
     private BigDecimal marketPrice;
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
     private String barcode;
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
     private String imageUrl;
     private EnabledStatus status;
     @Version

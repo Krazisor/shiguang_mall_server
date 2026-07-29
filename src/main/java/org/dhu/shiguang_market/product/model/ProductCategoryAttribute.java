@@ -1,6 +1,7 @@
 package org.dhu.shiguang_market.product.model;
 
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.FieldStrategy;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
@@ -19,10 +20,11 @@ public class ProductCategoryAttribute {
     private Long categoryId;
     private String attributeName;
     private AttributeValueType valueType;
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
     private String unit;
     private Boolean isRequired;
     private Boolean isFilterable;
-    @TableField(typeHandler = Jackson3TypeHandler.class)
+    @TableField(typeHandler = Jackson3TypeHandler.class, updateStrategy = FieldStrategy.ALWAYS)
     private List<String> optionsJson;
     private Integer sortOrder;
     private EnabledStatus status;
