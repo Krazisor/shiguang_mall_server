@@ -20,6 +20,7 @@ import org.springframework.web.bind.MissingRequestHeaderException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -78,6 +79,12 @@ public class GlobalExceptionHandler {
         log.warn("Required dependency is temporarily unavailable", ex);
         return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
                 .body(ApiErrorResponse.of("DEPENDENCY_UNAVAILABLE", "必要依赖暂时不可用", null));
+    }
+
+    @ExceptionHandler(NoResourceFoundException.class)
+    ResponseEntity<ApiErrorResponse> notFound(NoResourceFoundException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(ApiErrorResponse.of("RESOURCE_NOT_FOUND", "请求的资源不存在", null));
     }
 
     @ExceptionHandler(Exception.class)
