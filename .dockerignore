@@ -1,0 +1,13 @@
+.git
+.github
+.idea
+.mvn
+.env
+.env.*
+!.env.example
+target
+docs
+scripts
+sql
+.DS_Store
+*.iml
