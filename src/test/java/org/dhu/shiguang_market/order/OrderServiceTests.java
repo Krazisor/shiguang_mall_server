@@ -9,6 +9,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import org.dhu.shiguang_market.aftersale.mapper.AfterSaleRequestMapper;
 import org.dhu.shiguang_market.common.security.CurrentUserService;
 import org.dhu.shiguang_market.common.security.ShopAccessService;
 import org.dhu.shiguang_market.common.util.NumberGenerator;
@@ -34,6 +35,7 @@ class OrderServiceTests {
                 eq("example phone"), isNull(), isNull())).thenReturn(databasePage);
         OrderService service = new OrderService(
                 orderMapper, mock(OrderItemMapper.class), mock(OrderStatusHistoryMapper.class),
+                mock(AfterSaleRequestMapper.class),
                 mock(InventoryStockMapper.class), mock(InventoryTransactionMapper.class),
                 mock(SysUserMapper.class), currentUser, mock(ShopAccessService.class),
                 mock(OrderViewService.class), mock(NumberGenerator.class));

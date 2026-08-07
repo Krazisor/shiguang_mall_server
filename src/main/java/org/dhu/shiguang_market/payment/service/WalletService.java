@@ -112,6 +112,59 @@ public class WalletService {
         return operationView(transactionMapper.selectById(transaction.getId()));
     }
 
+    /**
+     * 将退款金额入账到指定用户钱包，并记录退款流水。
+     *
+     * <p>业务类型和退款编号组成数据库唯一键。重复调用时如果流水已经存在则直接返回，
+     * 从而避免相同退款重复增加余额。余额更新和流水写入处于同一事务。</p>
+     *
+     * @param userId       收款用户 ID
+     * @param amount       退款金额，必须大于 0
+     * @param refundNo     退款业务编号
+     * @param businessType 退款业务类型，例如 AFTER_SALE_REFUND
+     */
+    @Transactional
+    public void refund(long userId, BigDecimal amount, String refundNo, String businessType) {
+        if (amount == null || amount.signum() <= 0
+                || refundNo == null || refundNo.isBlank()
+                || businessType == null || businessType.isBlank()) {
+            throw BusinessException.badRequest("VALIDATION_FAILED", "退款参数不完整或金额无效");
+        }
+        String normalizedRefundNo = refundNo.trim();
+        String normalizedBusinessType = businessType.trim();
+
+        // 先按业务唯一键查重；并发重复请求仍由数据库唯一约束和事务回滚兜底。
+        WalletTransaction existing = transactionMapper.selectOne(new LambdaQueryWrapper<WalletTransaction>()
+                .eq(WalletTransaction::getBusinessType, normalizedBusinessType)
+                .eq(WalletTransaction::getBusinessNo, normalizedRefundNo));
+        if (existing != null) return;
+
+        WalletAccount wallet = requireWallet(userId, true);
+        if (wallet.getStatus() != WalletStatus.ACTIVE) {
+            throw BusinessException.unprocessable("WALLET_UNAVAILABLE", "钱包不可用");
+        }
+        BigDecimal before = wallet.getBalance();
+        if (walletMapper.credit(userId, amount) != 1) {
+            throw BusinessException.unprocessable("WALLET_UNAVAILABLE", "钱包不可用");
+        }
+        WalletAccount after = walletMapper.selectById(wallet.getId());
+
+        // 流水保存退款前后余额，便于后续查询和对账。
+        WalletTransaction transaction = new WalletTransaction();
+        transaction.setTransactionNo(numbers.next("WT"));
+        transaction.setWalletId(wallet.getId());
+        transaction.setTransactionType(WalletTransactionType.REFUND);
+        transaction.setDirection(TransactionDirection.CREDIT);
+        transaction.setAmount(amount);
+        transaction.setBalanceBefore(before);
+        transaction.setBalanceAfter(after.getBalance());
+        transaction.setBusinessType(normalizedBusinessType);
+        transaction.setBusinessNo(normalizedRefundNo);
+        if (transactionMapper.insert(transaction) != 1) {
+            throw new IllegalStateException("退款钱包流水写入失败");
+        }
+    }
+
     public WalletAccount requireWallet(long userId, boolean lock) {
         LambdaQueryWrapper<WalletAccount> query = new LambdaQueryWrapper<WalletAccount>()
                 .eq(WalletAccount::getUserId, userId);

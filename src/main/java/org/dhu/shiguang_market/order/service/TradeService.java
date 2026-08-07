@@ -8,6 +8,7 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import org.dhu.shiguang_market.aftersale.mapper.AfterSaleRequestMapper;
 import org.dhu.shiguang_market.cart.dto.CartDtos.CreateTradeRequest;
 import org.dhu.shiguang_market.cart.model.CartItem;
 import org.dhu.shiguang_market.cart.service.CartService;
@@ -49,6 +50,7 @@ public class TradeService {
     private final OrderInfoMapper orderMapper;
     private final OrderItemMapper itemMapper;
     private final OrderStatusHistoryMapper historyMapper;
+    private final AfterSaleRequestMapper afterSaleMapper;
     private final InventoryStockMapper stockMapper;
     private final InventoryTransactionMapper inventoryTransactionMapper;
     private final CartService cartService;
@@ -61,6 +63,7 @@ public class TradeService {
 
     public TradeService(TradeOrderMapper tradeMapper, OrderInfoMapper orderMapper,
                         OrderItemMapper itemMapper, OrderStatusHistoryMapper historyMapper,
+                        AfterSaleRequestMapper afterSaleMapper,
                         InventoryStockMapper stockMapper, InventoryTransactionMapper inventoryTransactionMapper,
                         CartService cartService, AddressService addressService,
                         CurrentUserService currentUser, IdempotencyService idempotency,
@@ -70,6 +73,7 @@ public class TradeService {
         this.orderMapper = orderMapper;
         this.itemMapper = itemMapper;
         this.historyMapper = historyMapper;
+        this.afterSaleMapper = afterSaleMapper;
         this.stockMapper = stockMapper;
         this.inventoryTransactionMapper = inventoryTransactionMapper;
         this.cartService = cartService;
@@ -136,6 +140,9 @@ public class TradeService {
         List<OrderInfo> orders = orderMapper.selectList(new LambdaQueryWrapper<OrderInfo>()
                 .eq(OrderInfo::getTradeId, tradeId).orderByAsc(OrderInfo::getId));
         for (OrderInfo order : orders) {
+            // 交易取消后订单不再继续履约，因此同步撤销尚未审核的售后申请。
+            // Mapper 内部限定 status=PENDING，不影响已审核、退货中或退款中的售后。
+            afterSaleMapper.cancelPendingByOrderId(order.getId());
             List<OrderItem> items = itemMapper.selectList(new LambdaQueryWrapper<OrderItem>()
                     .eq(OrderItem::getOrderId, order.getId()).orderByAsc(OrderItem::getSkuId));
             for (OrderItem item : items) {

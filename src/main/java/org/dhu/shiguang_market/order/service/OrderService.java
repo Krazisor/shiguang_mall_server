@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import java.time.LocalDateTime;
 import java.util.List;
+import org.dhu.shiguang_market.aftersale.mapper.AfterSaleRequestMapper;
 import org.dhu.shiguang_market.common.api.PageView;
 import org.dhu.shiguang_market.common.exception.BusinessException;
 import org.dhu.shiguang_market.common.model.MarketEnums.OperatorType;
@@ -39,6 +40,7 @@ public class OrderService {
     private final OrderInfoMapper orderMapper;
     private final OrderItemMapper itemMapper;
     private final OrderStatusHistoryMapper historyMapper;
+    private final AfterSaleRequestMapper afterSaleMapper;
     private final InventoryStockMapper stockMapper;
     private final InventoryTransactionMapper inventoryTransactionMapper;
     private final SysUserMapper userMapper;
@@ -48,13 +50,15 @@ public class OrderService {
     private final NumberGenerator numbers;
 
     public OrderService(OrderInfoMapper orderMapper, OrderItemMapper itemMapper,
-                        OrderStatusHistoryMapper historyMapper, InventoryStockMapper stockMapper,
+                        OrderStatusHistoryMapper historyMapper, AfterSaleRequestMapper afterSaleMapper,
+                        InventoryStockMapper stockMapper,
                         InventoryTransactionMapper inventoryTransactionMapper,
                         SysUserMapper userMapper, CurrentUserService currentUser,
                         ShopAccessService shopAccess, OrderViewService views, NumberGenerator numbers) {
         this.orderMapper = orderMapper;
         this.itemMapper = itemMapper;
         this.historyMapper = historyMapper;
+        this.afterSaleMapper = afterSaleMapper;
         this.stockMapper = stockMapper;
         this.inventoryTransactionMapper = inventoryTransactionMapper;
         this.userMapper = userMapper;
@@ -81,6 +85,7 @@ public class OrderService {
     @Transactional
     public OrderDetailView complete(long orderId) {
         OrderInfo order = owned(orderId, true);
+        requireNoActiveAfterSale(orderId);
         if (order.getOrderStatus() != OrderStatus.PENDING_RECEIPT) {
             throw BusinessException.conflict("ORDER_NOT_COMPLETABLE", "订单当前不可确认收货");
         }
@@ -122,6 +127,7 @@ public class OrderService {
             throw BusinessException.conflict("TRACKING_NO_ALREADY_USED", "运单号已使用");
         }
         OrderInfo order = scoped(shopId, orderId, true);
+        requireNoActiveAfterSale(orderId);
         if (order.getOrderStatus() != OrderStatus.PENDING_SHIPMENT
                 || order.getPaymentStatus() == OrderPaymentStatus.UNPAID) {
             throw BusinessException.conflict("ORDER_NOT_SHIPPABLE", "订单当前不可发货");
@@ -161,6 +167,16 @@ public class OrderService {
         historyMapper.insert(history(orderId, OrderStatus.PENDING_SHIPMENT, OrderStatus.PENDING_RECEIPT,
                 OrderOperationType.SHIP, OperatorType.SHOP, currentUser.id(), null));
         return views.detail(orderMapper.selectById(orderId));
+    }
+
+    /**
+     * 发货和确认收货共用的售后保护。
+     * PENDING、WAITING_RETURN、REFUNDING 都表示售后尚未结束，此时禁止继续推进订单。
+     */
+    private void requireNoActiveAfterSale(long orderId) {
+        if (afterSaleMapper.existsActiveByOrderId(orderId)) {
+            throw BusinessException.conflict("ORDER_HAS_ACTIVE_AFTER_SALE", "订单存在活跃售后");
+        }
     }
 
     private Page<OrderInfo> pageOrders(Long userId, Long shopId, OrderStatus status,
