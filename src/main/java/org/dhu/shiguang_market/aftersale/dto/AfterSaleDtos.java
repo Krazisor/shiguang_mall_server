@@ -1,14 +1,15 @@
 package org.dhu.shiguang_market.aftersale.dto;
 
-import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
-import com.fasterxml.jackson.annotation.JsonSetter;
+import org.dhu.shiguang_market.common.api.CommonViews.ShopSummary;
+import org.dhu.shiguang_market.common.api.CommonViews.UserSummary;
 import org.dhu.shiguang_market.common.model.MarketEnums.AfterSaleStatus;
 import org.dhu.shiguang_market.common.model.MarketEnums.AfterSaleType;
 import org.dhu.shiguang_market.common.model.MarketEnums.OrderStatus;
@@ -25,51 +26,28 @@ public final class AfterSaleDtos {
             @NotBlank String orderItemId,
             @NotNull AfterSaleType requestType,
             @Min(1) int quantity,
-            @NotBlank @Size(max = 50) String reasonCode,
+            @NotBlank @Size(max = 30) String reasonCode,
             @Size(max = 500) String reasonDescription,
             @Size(max = 9) List<String> evidenceUrls,
-            @NotBlank String requestedAmount) {
+            @NotBlank @Pattern(regexp = "^(0|[1-9][0-9]{0,15})\\.[0-9]{2}$") String requestedAmount) {
     }
 
     public record ReturnShipmentRequest(
-            @NotBlank @Size(max = 32) String carrierCode,
+            @NotBlank @Size(max = 64) String carrierCode,
             @NotBlank @Size(max = 128) String carrierName,
             @NotBlank @Size(max = 128) String trackingNo) {
     }
 
-    public static final class UpdateReturnShipmentRequest {
-        private String carrierCode;
-        private String carrierName;
-        private String trackingNo;
-        private Integer version;
-        private boolean carrierCodePresent;
-        private boolean carrierNamePresent;
-        private boolean trackingNoPresent;
-
-        @JsonSetter("carrierCode")
-        public void setCarrierCode(String value) { this.carrierCode = value; this.carrierCodePresent = true; }
-
-        @JsonSetter("carrierName")
-        public void setCarrierName(String value) { this.carrierName = value; this.carrierNamePresent = true; }
-
-        @JsonSetter("trackingNo")
-        public void setTrackingNo(String value) { this.trackingNo = value; this.trackingNoPresent = true; }
-
-        @JsonSetter("version")
-        public void setVersion(Integer value) { this.version = value; }
-
-        public String carrierCode() { return carrierCode; }
-        public String carrierName() { return carrierName; }
-        public String trackingNo() { return trackingNo; }
-        public Integer version() { return version; }
-        public boolean hasCarrierCode() { return carrierCodePresent; }
-        public boolean hasCarrierName() { return carrierNamePresent; }
-        public boolean hasTrackingNo() { return trackingNoPresent; }
+    public record UpdateReturnShipmentRequest(
+            @NotBlank @Size(max = 64) String carrierCode,
+            @NotBlank @Size(max = 128) String carrierName,
+            @NotBlank @Size(max = 128) String trackingNo,
+            @NotNull Integer version) {
     }
 
     public record ApproveAfterSaleRequest(
             @Min(1) int approvedQuantity,
-            @NotBlank String approvedAmount,
+            @NotBlank @Pattern(regexp = "^(0|[1-9][0-9]{0,15})\\.[0-9]{2}$") String approvedAmount,
             @Size(max = 500) String reviewComment,
             @NotNull Integer version) {
     }
@@ -85,7 +63,7 @@ public final class AfterSaleDtos {
     }
 
     public record RetryRefundRequest(
-            @Size(max = 500) String remark,
+            @NotBlank @Size(max = 500) String remark,
             @NotNull Integer version) {
     }
 
@@ -93,10 +71,6 @@ public final class AfterSaleDtos {
 
     public record AfterSaleOrderSnapshot(
             String id, String orderNo, OrderStatus orderStatus) {
-    }
-
-    public record AfterSaleShopSnapshot(
-            String id, String shopNo, String shopName, String logoUrl, String status) {
     }
 
     public record AfterSaleItemSnapshot(
@@ -108,8 +82,9 @@ public final class AfterSaleDtos {
             String reviewerId, String comment, OffsetDateTime reviewedAt) {
     }
 
-    public record ReturnShipmentSnapshot(
-            String carrierCode, String carrierName, String trackingNo, OffsetDateTime returnedAt) {
+    public record ReturnShipmentView(
+            String carrierCode, String carrierName, String trackingNo,
+            OffsetDateTime returnedAt, OffsetDateTime receivedAt) {
     }
 
     // ─── 买家端视图 ───
@@ -125,18 +100,19 @@ public final class AfterSaleDtos {
 
     public record AfterSaleSummaryView(
             String id, String afterSaleNo, AfterSaleType requestType, AfterSaleStatus status,
-            RefundStatus refundStatus, AfterSaleOrderSnapshot order, int quantity,
-            String requestedAmount, Integer approvedQuantity, String approvedAmount,
+            RefundStatus refundStatus, AfterSaleOrderSnapshot order, ShopSummary shop,
+            AfterSaleItemSnapshot item, int quantity,
+            String requestedAmount, String approvedAmount,
             OffsetDateTime createdAt, OffsetDateTime updatedAt) {
     }
 
     public record AfterSaleDetailView(
             String id, String afterSaleNo, AfterSaleType requestType, AfterSaleStatus status,
-            RefundStatus refundStatus, AfterSaleOrderSnapshot order, AfterSaleShopSnapshot shop,
+            RefundStatus refundStatus, AfterSaleOrderSnapshot order, ShopSummary shop,
             AfterSaleItemSnapshot item, int quantity, String reasonCode, String reasonDescription,
             List<String> evidenceUrls, String requestedAmount, Integer approvedQuantity,
             String approvedAmount, AfterSaleReviewView review,
-            ReturnShipmentSnapshot returnShipment, String refundNo,
+            ReturnShipmentView returnShipment, String refundNo,
             String refundFailureReason, OffsetDateTime refundedAt, OffsetDateTime completedAt,
             OffsetDateTime cancelledAt, Integer version, OffsetDateTime createdAt,
             OffsetDateTime updatedAt, List<String> availableActions) {
@@ -146,23 +122,23 @@ public final class AfterSaleDtos {
 
     public record ShopAfterSaleSummaryView(
             String id, String afterSaleNo, AfterSaleType requestType, AfterSaleStatus status,
-            RefundStatus refundStatus, AfterSaleOrderSnapshot order,
+            RefundStatus refundStatus, AfterSaleOrderSnapshot order, ShopSummary shop,
             AfterSaleItemSnapshot item, int quantity, String requestedAmount,
-            Integer approvedQuantity, String approvedAmount,
-            String buyerId, String buyerName,
-            OffsetDateTime createdAt, OffsetDateTime updatedAt) {
+            String approvedAmount, OffsetDateTime createdAt, OffsetDateTime updatedAt,
+            UserSummary buyer) {
     }
 
     public record ShopAfterSaleDetailView(
             String id, String afterSaleNo, AfterSaleType requestType, AfterSaleStatus status,
-            RefundStatus refundStatus, AfterSaleOrderSnapshot order, AfterSaleShopSnapshot shop,
+            RefundStatus refundStatus, AfterSaleOrderSnapshot order, ShopSummary shop,
             AfterSaleItemSnapshot item, int quantity, String reasonCode, String reasonDescription,
             List<String> evidenceUrls, String requestedAmount, Integer approvedQuantity,
             String approvedAmount, AfterSaleReviewView review,
-            ReturnShipmentSnapshot returnShipment, String refundNo,
+            ReturnShipmentView returnShipment, String refundNo,
             String refundFailureReason, OffsetDateTime refundedAt, OffsetDateTime completedAt,
-            OffsetDateTime cancelledAt, Integer version, String buyerId, String buyerName,
+            OffsetDateTime cancelledAt, Integer version,
             OffsetDateTime createdAt, OffsetDateTime updatedAt,
-            List<String> availableActions) {
+            List<String> availableActions, UserSummary buyer,
+            AfterSaleEligibilityView eligibilityAtReview) {
     }
 }
