@@ -479,6 +479,26 @@ public class ShopAfterSaleService {
     }
 
     /**
+     * 定时任务使用的退款重试入口。
+     *
+     * <p>该入口不依赖当前登录用户，但仍通过售后行锁、状态和 version 校验保证安全；
+     * 操作者沿用原审核人，避免系统任务伪造平台用户。</p>
+     */
+    @Transactional
+    public boolean retryFailedRefund(long afterSaleId) {
+        AfterSaleRequest ar = afterSaleMapper.selectById(afterSaleId);
+        if (ar == null || ar.getStatus() != AfterSaleStatus.REFUNDING
+                || ar.getRefundStatus() != RefundStatus.FAILED) {
+            return false;
+        }
+        OrderInfo order = orderMapper.selectById(ar.getOrderId());
+        if (order == null) return false;
+        RetryRefundRequest request = new RetryRefundRequest("系统定时重试退款", ar.getVersion());
+        retry(order.getShopId(), afterSaleId, request, ar.getReviewerId());
+        return true;
+    }
+
+    /**
      * 重试的核心业务逻辑（幂等 action 回调）。
      */
     private ShopAfterSaleDetailView retry(long shopId, long afterSaleId,
@@ -516,7 +536,8 @@ public class ShopAfterSaleService {
             releaseRefundOnlyStock(ar, item, operatorId);
         }
 
-        return detail(shopId, ar.getId());
+        AfterSaleRequest latest = afterSaleMapper.selectById(ar.getId());
+        return shopDetail(latest, afterSaleService.detail(latest));
     }
 
     // ══════════════════════════════════════════════════════════════

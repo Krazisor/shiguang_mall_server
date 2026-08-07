@@ -465,6 +465,14 @@ public class AfterSaleService {
     }
 
     /**
+     * 为平台运营只读查询复用售后摘要映射。
+     * 该方法只组装展示数据，不执行买家身份校验，也不修改售后状态。
+     */
+    public AfterSaleSummaryView summaryForOperation(AfterSaleRequest afterSale) {
+        return summary(afterSale);
+    }
+
+    /**
      * 将售后实体映射为完整详情视图。
      * <p>
      * 组装订单快照、店铺快照、商品快照、审核信息、退货物流、退款进度和可用操作列表。
