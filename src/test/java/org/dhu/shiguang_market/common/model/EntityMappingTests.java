@@ -65,6 +65,8 @@ class EntityMappingTests {
         assertAlways(ProductSpu.class, "brandId", "subtitle", "coverUrl", "galleryJson",
                 "detailHtml", "packingList", "serviceNote");
         assertAlways(ProductSku.class, "marketPrice", "barcode", "imageUrl");
+        // 退款重试进入 PROCESSING 时必须能显式清空上一轮失败原因。
+        assertAlways(AfterSaleRequest.class, "refundFailureReason");
     }
 
     private static void assertAlways(Class<?> entity, String... fields) throws Exception {

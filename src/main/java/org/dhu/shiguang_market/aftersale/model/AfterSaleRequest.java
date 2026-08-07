@@ -1,5 +1,6 @@
 package org.dhu.shiguang_market.aftersale.model;
 
+import com.baomidou.mybatisplus.annotation.FieldStrategy;
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
@@ -43,6 +44,8 @@ public class AfterSaleRequest {
     private LocalDateTime returnReceivedAt;
     private String refundNo;
     private RefundStatus refundStatus;
+    // FAILED -> PROCESSING/SUCCESS 时必须把失败原因更新为 NULL，以满足数据库状态约束。
+    @TableField(updateStrategy = FieldStrategy.ALWAYS)
     private String refundFailureReason;
     private LocalDateTime refundedAt;
     private LocalDateTime completedAt;

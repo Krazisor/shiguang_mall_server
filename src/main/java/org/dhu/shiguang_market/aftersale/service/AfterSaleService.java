@@ -206,6 +206,8 @@ public class AfterSaleService {
      */
     @Transactional
     public AfterSaleDetailView create(CreateAfterSaleRequest request, String key) {
+        // 创建售后是买家侧受控能力，登录校验和权限校验统一在 Service 边界完成。
+        currentUser.requirePermission("after-sale:create");
         long userId = currentUser.id();
         String path = "/api/after-sales";
         return idempotency.execute(userId, "POST", path, key, request,
