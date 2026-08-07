@@ -28,8 +28,7 @@ import org.dhu.shiguang_market.identity.mapper.SysUserRoleMapper;
 import org.dhu.shiguang_market.identity.model.SysRole;
 import org.dhu.shiguang_market.identity.model.SysUser;
 import org.dhu.shiguang_market.identity.model.SysUserRole;
-import org.dhu.shiguang_market.payment.mapper.WalletAccountMapper;
-import org.dhu.shiguang_market.payment.model.WalletAccount;
+import org.dhu.shiguang_market.integration.payment.WalletProvisionPort;
 import org.dhu.shiguang_market.shop.mapper.ShopMapper;
 import org.dhu.shiguang_market.shop.mapper.ShopUserMapper;
 import org.dhu.shiguang_market.shop.model.Shop;
@@ -45,7 +44,7 @@ public class IdentityService {
     private final SysUserMapper userMapper;
     private final SysRoleMapper roleMapper;
     private final SysUserRoleMapper userRoleMapper;
-    private final WalletAccountMapper walletMapper;
+    private final WalletProvisionPort walletProvision;
     private final ShopMapper shopMapper;
     private final ShopUserMapper shopUserMapper;
     private final CurrentUserService currentUser;
@@ -53,14 +52,14 @@ public class IdentityService {
     private final ContentSafety contentSafety;
 
     public IdentityService(SysUserMapper userMapper, SysRoleMapper roleMapper,
-                           SysUserRoleMapper userRoleMapper, WalletAccountMapper walletMapper,
+                           SysUserRoleMapper userRoleMapper, WalletProvisionPort walletProvision,
                            ShopMapper shopMapper, ShopUserMapper shopUserMapper,
                            CurrentUserService currentUser, PasswordService passwordService,
                            ContentSafety contentSafety) {
         this.userMapper = userMapper;
         this.roleMapper = roleMapper;
         this.userRoleMapper = userRoleMapper;
-        this.walletMapper = walletMapper;
+        this.walletProvision = walletProvision;
         this.shopMapper = shopMapper;
         this.shopUserMapper = shopUserMapper;
         this.currentUser = currentUser;
@@ -99,12 +98,8 @@ public class IdentityService {
         assignment.setRoleScope(ScopeType.PLATFORM);
         userRoleMapper.insert(assignment);
 
-        WalletAccount wallet = new WalletAccount();
-        wallet.setUserId(user.getId());
-        wallet.setBalance(java.math.BigDecimal.ZERO.setScale(2));
-        wallet.setStatus(org.dhu.shiguang_market.common.model.MarketEnums.WalletStatus.ACTIVE);
-        wallet.setVersion(0);
-        walletMapper.insert(wallet);
+        // 通过 B 线端口创建钱包，避免身份模块直接操作 wallet_account 表。
+        walletProvision.provision(user.getId());
         return user(user);
     }
 

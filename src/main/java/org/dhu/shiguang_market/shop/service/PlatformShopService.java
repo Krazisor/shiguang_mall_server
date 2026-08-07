@@ -6,13 +6,9 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import java.util.Map;
 import java.util.Set;
-import org.dhu.shiguang_market.aftersale.mapper.AfterSaleRequestMapper;
-import org.dhu.shiguang_market.aftersale.model.AfterSaleRequest;
 import org.dhu.shiguang_market.common.api.PageView;
 import org.dhu.shiguang_market.common.exception.BusinessException;
 import org.dhu.shiguang_market.common.model.MarketEnums.ActiveStatus;
-import org.dhu.shiguang_market.common.model.MarketEnums.AfterSaleStatus;
-import org.dhu.shiguang_market.common.model.MarketEnums.OrderStatus;
 import org.dhu.shiguang_market.common.model.MarketEnums.ScopeType;
 import org.dhu.shiguang_market.common.model.MarketEnums.ShopStatus;
 import org.dhu.shiguang_market.common.model.MarketEnums.UserStatus;
@@ -24,8 +20,7 @@ import org.dhu.shiguang_market.identity.mapper.SysUserMapper;
 import org.dhu.shiguang_market.identity.model.SysRole;
 import org.dhu.shiguang_market.identity.model.SysUser;
 import org.dhu.shiguang_market.identity.service.IdentityViewMapper;
-import org.dhu.shiguang_market.order.mapper.OrderInfoMapper;
-import org.dhu.shiguang_market.order.model.OrderInfo;
+import org.dhu.shiguang_market.integration.order.ActiveShopBusinessPort;
 import org.dhu.shiguang_market.shop.dto.PlatformDtos.ChangeShopStatusRequest;
 import org.dhu.shiguang_market.shop.dto.PlatformDtos.CreateShopRequest;
 import org.dhu.shiguang_market.shop.dto.PlatformDtos.PlatformShopView;
@@ -48,23 +43,21 @@ public class PlatformShopService {
     private final ShopUserMapper shopUserMapper;
     private final SysUserMapper userMapper;
     private final SysRoleMapper roleMapper;
-    private final OrderInfoMapper orderMapper;
-    private final AfterSaleRequestMapper afterSaleMapper;
+    private final ActiveShopBusinessPort activeShopBusiness;
     private final CurrentUserService currentUser;
     private final NumberGenerator numbers;
     private final ContentSafety contentSafety;
 
     public PlatformShopService(ShopMapper shopMapper, ShopUserMapper shopUserMapper,
                                SysUserMapper userMapper, SysRoleMapper roleMapper,
-                               OrderInfoMapper orderMapper, AfterSaleRequestMapper afterSaleMapper,
+                               ActiveShopBusinessPort activeShopBusiness,
                                CurrentUserService currentUser, NumberGenerator numbers,
                                ContentSafety contentSafety) {
         this.shopMapper = shopMapper;
         this.shopUserMapper = shopUserMapper;
         this.userMapper = userMapper;
         this.roleMapper = roleMapper;
-        this.orderMapper = orderMapper;
-        this.afterSaleMapper = afterSaleMapper;
+        this.activeShopBusiness = activeShopBusiness;
         this.currentUser = currentUser;
         this.numbers = numbers;
         this.contentSafety = contentSafety;
@@ -140,23 +133,13 @@ public class PlatformShopService {
         if (!TRANSITIONS.getOrDefault(shop.getStatus(), Set.of()).contains(request.targetStatus())) {
             throw BusinessException.conflict("STATE_CONFLICT", "店铺状态不允许该迁移");
         }
-        if (request.targetStatus() == ShopStatus.CLOSED && hasActiveBusiness(shopId)) {
+        if (request.targetStatus() == ShopStatus.CLOSED
+                && activeShopBusiness.hasActiveBusiness(shopId)) {
             throw BusinessException.unprocessable("SHOP_HAS_ACTIVE_BUSINESS", "店铺存在未完结业务");
         }
         shop.setStatus(request.targetStatus());
         shopMapper.updateById(shop);
         return view(shopMapper.selectById(shopId));
-    }
-
-    private boolean hasActiveBusiness(long shopId) {
-        boolean activeOrders = orderMapper.exists(new LambdaQueryWrapper<OrderInfo>()
-                .eq(OrderInfo::getShopId, shopId).in(OrderInfo::getOrderStatus,
-                        OrderStatus.PENDING_PAYMENT, OrderStatus.PENDING_SHIPMENT, OrderStatus.PENDING_RECEIPT));
-        if (activeOrders) return true;
-        return afterSaleMapper.selectCount(new LambdaQueryWrapper<AfterSaleRequest>()
-                .in(AfterSaleRequest::getStatus, AfterSaleStatus.PENDING,
-                        AfterSaleStatus.WAITING_RETURN, AfterSaleStatus.REFUNDING)
-                .inSql(AfterSaleRequest::getOrderId, "SELECT id FROM order_info WHERE shop_id = " + shopId)) > 0;
     }
 
     private PlatformShopView view(Shop shop) {
