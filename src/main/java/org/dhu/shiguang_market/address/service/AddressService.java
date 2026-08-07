@@ -1,13 +1,14 @@
-package org.dhu.shiguang_market.identity.service;
+package org.dhu.shiguang_market.address.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import java.util.List;
+import org.dhu.shiguang_market.address.mapper.UserAddressMapper;
+import org.dhu.shiguang_market.address.model.UserAddress;
 import org.dhu.shiguang_market.common.api.CommonViews.AddressView;
 import org.dhu.shiguang_market.common.exception.BusinessException;
 import org.dhu.shiguang_market.common.security.CurrentUserService;
 import org.dhu.shiguang_market.identity.dto.IdentityDtos.AddressUpsertRequest;
-import org.dhu.shiguang_market.identity.mapper.UserAddressMapper;
-import org.dhu.shiguang_market.identity.model.UserAddress;
+import org.dhu.shiguang_market.identity.service.IdentityViewMapper;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 

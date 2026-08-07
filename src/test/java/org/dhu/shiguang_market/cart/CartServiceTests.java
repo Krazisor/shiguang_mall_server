@@ -17,7 +17,7 @@ import org.dhu.shiguang_market.common.model.MarketEnums.EnabledStatus;
 import org.dhu.shiguang_market.common.model.MarketEnums.ProductStatus;
 import org.dhu.shiguang_market.common.model.MarketEnums.ShopStatus;
 import org.dhu.shiguang_market.common.security.CurrentUserService;
-import org.dhu.shiguang_market.identity.service.AddressService;
+import org.dhu.shiguang_market.address.service.AddressService;
 import org.dhu.shiguang_market.inventory.mapper.InventoryStockMapper;
 import org.dhu.shiguang_market.inventory.model.InventoryStock;
 import org.dhu.shiguang_market.product.mapper.ProductSkuMapper;

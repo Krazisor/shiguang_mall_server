@@ -1,4 +1,4 @@
-package org.dhu.shiguang_market.identity.model;
+package org.dhu.shiguang_market.address.model;
 
 import com.baomidou.mybatisplus.annotation.FieldStrategy;
 import com.baomidou.mybatisplus.annotation.IdType;

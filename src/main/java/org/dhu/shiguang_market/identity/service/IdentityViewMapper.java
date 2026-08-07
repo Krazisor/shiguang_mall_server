@@ -5,7 +5,7 @@ import org.dhu.shiguang_market.common.api.CommonViews.ShopSummary;
 import org.dhu.shiguang_market.common.api.CommonViews.UserSummary;
 import org.dhu.shiguang_market.common.util.Formatters;
 import org.dhu.shiguang_market.identity.model.SysUser;
-import org.dhu.shiguang_market.identity.model.UserAddress;
+import org.dhu.shiguang_market.address.model.UserAddress;
 import org.dhu.shiguang_market.shop.model.Shop;
 
 public final class IdentityViewMapper {

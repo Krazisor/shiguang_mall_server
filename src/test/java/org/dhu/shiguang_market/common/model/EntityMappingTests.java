@@ -11,7 +11,7 @@ import java.lang.reflect.Field;
 import java.util.List;
 import org.dhu.shiguang_market.aftersale.model.AfterSaleRequest;
 import org.dhu.shiguang_market.identity.model.SysUser;
-import org.dhu.shiguang_market.identity.model.UserAddress;
+import org.dhu.shiguang_market.address.model.UserAddress;
 import org.dhu.shiguang_market.inventory.model.InventoryStock;
 import org.dhu.shiguang_market.order.model.OrderInfo;
 import org.dhu.shiguang_market.order.model.TradeOrder;

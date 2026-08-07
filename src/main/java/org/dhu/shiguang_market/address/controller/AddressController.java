@@ -1,11 +1,11 @@
-package org.dhu.shiguang_market.identity.controller;
+package org.dhu.shiguang_market.address.controller;
 
 import jakarta.validation.Valid;
 import java.util.List;
+import org.dhu.shiguang_market.address.service.AddressService;
 import org.dhu.shiguang_market.common.api.ApiResponse;
 import org.dhu.shiguang_market.common.api.CommonViews.AddressView;
 import org.dhu.shiguang_market.identity.dto.IdentityDtos.AddressUpsertRequest;
-import org.dhu.shiguang_market.identity.service.AddressService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;

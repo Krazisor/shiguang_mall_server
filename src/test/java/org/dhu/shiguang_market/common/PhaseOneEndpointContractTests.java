@@ -8,7 +8,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 import org.dhu.shiguang_market.cart.controller.CartController;
-import org.dhu.shiguang_market.identity.controller.AddressController;
+import org.dhu.shiguang_market.address.controller.AddressController;
 import org.dhu.shiguang_market.identity.controller.AuthController;
 import org.dhu.shiguang_market.inventory.controller.InventoryController;
 import org.dhu.shiguang_market.order.controller.OrderController;
