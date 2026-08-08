@@ -115,7 +115,7 @@ public class OrderService {
         return PageView.of(result, result.getRecords().stream().map(order -> {
             OrderSummaryView summary = views.summary(order);
             return new ShopOrderSummaryView(summary.id(), summary.orderNo(), summary.tradeId(), summary.tradeNo(),
-                    summary.shop(), summary.orderStatus(), summary.paymentStatus(), summary.payableAmount(),
+                    summary.shop(), summary.orderStatus(), summary.displayStatus(), summary.paymentStatus(), summary.payableAmount(),
                     summary.refundAmount(), summary.itemSummary(), summary.itemKinds(), summary.totalQuantity(),
                     summary.createdAt(), summary.availableActions(),
                     IdentityViewMapper.user(userMapper.selectById(order.getUserId())));

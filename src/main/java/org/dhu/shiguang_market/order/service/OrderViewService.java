@@ -7,6 +7,8 @@ import static org.dhu.shiguang_market.common.util.Formatters.time;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import java.util.List;
 import org.dhu.shiguang_market.common.api.CommonViews.AddressSnapshot;
+import org.dhu.shiguang_market.common.model.MarketEnums.OrderDisplayStatus;
+import org.dhu.shiguang_market.aftersale.mapper.AfterSaleRequestMapper;
 import org.dhu.shiguang_market.identity.service.IdentityViewMapper;
 import org.dhu.shiguang_market.order.dto.OrderDtos.OrderDetailView;
 import org.dhu.shiguang_market.order.dto.OrderDtos.OrderItemSummaryView;
@@ -34,15 +36,17 @@ public class OrderViewService {
     private final OrderItemMapper itemMapper;
     private final OrderStatusHistoryMapper historyMapper;
     private final ShopMapper shopMapper;
+    private final AfterSaleRequestMapper afterSaleMapper;
 
     public OrderViewService(TradeOrderMapper tradeMapper, OrderInfoMapper orderMapper,
                             OrderItemMapper itemMapper, OrderStatusHistoryMapper historyMapper,
-                            ShopMapper shopMapper) {
+                            ShopMapper shopMapper, AfterSaleRequestMapper afterSaleMapper) {
         this.tradeMapper = tradeMapper;
         this.orderMapper = orderMapper;
         this.itemMapper = itemMapper;
         this.historyMapper = historyMapper;
         this.shopMapper = shopMapper;
+        this.afterSaleMapper = afterSaleMapper;
     }
 
     public TradeDetailView trade(TradeOrder trade) {
@@ -71,7 +75,7 @@ public class OrderViewService {
                         item.getImageUrl(), item.getQuantity())).toList();
         int totalQuantity = items.stream().mapToInt(OrderItem::getQuantity).sum();
         return new OrderSummaryView(id(order.getId()), order.getOrderNo(), id(order.getTradeId()),
-                trade.getTradeNo(), IdentityViewMapper.shop(shop), order.getOrderStatus(),
+                trade.getTradeNo(), IdentityViewMapper.shop(shop), order.getOrderStatus(), displayStatus(order),
                 order.getPaymentStatus(), money(order.getPayableAmount()), money(order.getRefundAmount()),
                 itemSummary, items.size(), totalQuantity, time(order.getCreatedAt()), actions(order));
     }
@@ -93,7 +97,7 @@ public class OrderViewService {
                 : new ShippingView(order.getCarrierCode(), order.getCarrierName(),
                 order.getTrackingNo(), time(order.getShippedAt()));
         return new OrderDetailView(id(order.getId()), order.getOrderNo(), id(order.getTradeId()),
-                trade.getTradeNo(), IdentityViewMapper.shop(shop), order.getOrderStatus(), order.getPaymentStatus(),
+                trade.getTradeNo(), IdentityViewMapper.shop(shop), order.getOrderStatus(), displayStatus(order), order.getPaymentStatus(),
                 money(order.getItemAmount()), money(order.getFreightAmount()), money(order.getPayableAmount()),
                 money(order.getRefundAmount()), order.getBuyerRemark(), address(trade), shipping,
                 items, history, actions(order));
@@ -112,6 +116,18 @@ public class OrderViewService {
             case PENDING_RECEIPT -> List.of("COMPLETE");
             default -> List.of();
         };
+    }
+
+    /**
+     * 订单履约状态与售后状态是两个独立状态机。这里仅计算面向订单界面的聚合展示状态，
+     * 不改写 order_info.order_status，避免影响发货、确认收货及后台筛选等履约逻辑。
+     */
+    private OrderDisplayStatus displayStatus(OrderInfo order) {
+        if (afterSaleMapper.existsActiveByOrderId(order.getId())
+                || afterSaleMapper.existsPendingAppealByOrderId(order.getId())) {
+            return OrderDisplayStatus.AFTER_SALE;
+        }
+        return OrderDisplayStatus.valueOf(order.getOrderStatus().name());
     }
 
     private AddressSnapshot address(TradeOrder trade) {

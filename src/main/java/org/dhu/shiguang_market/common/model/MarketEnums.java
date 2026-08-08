@@ -47,6 +47,11 @@ public final class MarketEnums {
         PENDING_PAYMENT, PENDING_SHIPMENT, PENDING_RECEIPT, COMPLETED, CANCELLED
     }
 
+    /** 订单列表/详情面向用户展示的聚合状态；履约状态仍由 OrderStatus 表示。 */
+    public enum OrderDisplayStatus implements StringCodeEnum {
+        AFTER_SALE, PENDING_PAYMENT, PENDING_SHIPMENT, PENDING_RECEIPT, COMPLETED, CANCELLED
+    }
+
     public enum OrderPaymentStatus implements StringCodeEnum {
         UNPAID, PAID, PARTIALLY_REFUNDED, REFUNDED
     }

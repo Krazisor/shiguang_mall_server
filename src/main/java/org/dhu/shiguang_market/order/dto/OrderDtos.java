@@ -10,6 +10,7 @@ import org.dhu.shiguang_market.common.api.CommonViews.ShopSummary;
 import org.dhu.shiguang_market.common.api.CommonViews.UserSummary;
 import org.dhu.shiguang_market.common.model.MarketEnums.OperatorType;
 import org.dhu.shiguang_market.common.model.MarketEnums.OrderOperationType;
+import org.dhu.shiguang_market.common.model.MarketEnums.OrderDisplayStatus;
 import org.dhu.shiguang_market.common.model.MarketEnums.OrderPaymentStatus;
 import org.dhu.shiguang_market.common.model.MarketEnums.OrderStatus;
 import org.dhu.shiguang_market.common.model.MarketEnums.ReservationStatus;
@@ -33,14 +34,14 @@ public final class OrderDtos {
 
     public record OrderSummaryView(
             String id, String orderNo, String tradeId, String tradeNo, ShopSummary shop,
-            OrderStatus orderStatus, OrderPaymentStatus paymentStatus, String payableAmount,
+            OrderStatus orderStatus, OrderDisplayStatus displayStatus, OrderPaymentStatus paymentStatus, String payableAmount,
             String refundAmount, List<OrderItemSummaryView> itemSummary, int itemKinds,
             int totalQuantity, OffsetDateTime createdAt, List<String> availableActions) {
     }
 
     public record ShopOrderSummaryView(
             String id, String orderNo, String tradeId, String tradeNo, ShopSummary shop,
-            OrderStatus orderStatus, OrderPaymentStatus paymentStatus, String payableAmount,
+            OrderStatus orderStatus, OrderDisplayStatus displayStatus, OrderPaymentStatus paymentStatus, String payableAmount,
             String refundAmount, List<OrderItemSummaryView> itemSummary, int itemKinds,
             int totalQuantity, OffsetDateTime createdAt, List<String> availableActions,
             UserSummary buyer) {
@@ -65,7 +66,7 @@ public final class OrderDtos {
 
     public record OrderDetailView(
             String id, String orderNo, String tradeId, String tradeNo, ShopSummary shop,
-            OrderStatus orderStatus, OrderPaymentStatus paymentStatus, String itemAmount,
+            OrderStatus orderStatus, OrderDisplayStatus displayStatus, OrderPaymentStatus paymentStatus, String itemAmount,
             String freightAmount, String payableAmount, String refundAmount, String buyerRemark,
             AddressSnapshot address, ShippingView shipping, List<OrderItemView> items,
             List<OrderStatusHistoryView> history, List<String> availableActions) {

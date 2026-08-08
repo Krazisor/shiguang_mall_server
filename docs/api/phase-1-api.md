@@ -543,6 +543,9 @@
 
 订单列表是子订单列表；一个父交易会出现多条店铺订单。`keyword` 匹配 `orderNo`、`tradeNo`、商品名称。
 
+`orderStatus` 是订单履约状态，用于筛选和履约业务判断；`displayStatus` 是订单界面的聚合展示状态。
+当订单存在 `PENDING`、`WAITING_RETURN`、`REFUNDING` 售后，或存在待裁决售后申诉时，`displayStatus` 为 `AFTER_SALE`，前端应展示“售后中”等文案；售后结束后自动恢复为对应的 `orderStatus` 值。
+
 ```json
 // OrderSummaryView
 {
@@ -558,6 +561,7 @@
     "status": "ACTIVE"
   },
   "orderStatus": "PENDING_SHIPMENT",
+  "displayStatus": "PENDING_SHIPMENT",
   "paymentStatus": "PAID",
   "payableAmount": "7998.00",
   "refundAmount": "0.00",
@@ -586,6 +590,7 @@
     "status": "ACTIVE"
   },
   "orderStatus": "PENDING_RECEIPT",
+  "displayStatus": "PENDING_RECEIPT",
   "paymentStatus": "PAID",
   "itemAmount": "7998.00",
   "freightAmount": "0.00",
