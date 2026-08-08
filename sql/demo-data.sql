@@ -242,15 +242,35 @@ INSERT INTO order_item (
     unit_price, quantity, original_amount, freight_amount, payable_amount, refunded_quantity,
     refunded_amount, reservation_status
 )
-VALUES
-    (@order1a, @shop_a, @spu_a3, @sku_a3, 'SPU_DEMO_A3', 'SKU_DEMO_A3_BLACK', '时光降噪耳机 Pro', '曜石黑', JSON_OBJECT('color', '曜石黑'), 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=480&q=80', 899.00, 1, 899.00, 10.00, 909.00, 0, 0.00, 'DEDUCTED'),
-    (@order1b, @shop_b, @spu_b2, @sku_b2, 'SPU_DEMO_B2', 'SKU_DEMO_B2_GREEN', '晨光保温杯 480ml', '抹茶绿', JSON_OBJECT('color', '抹茶绿'), 'https://images.unsplash.com/photo-1602143407151-7111542de6e8?w=480&q=80', 129.00, 2, 258.00, 8.00, 266.00, 0, 0.00, 'DEDUCTED'),
-    (@order2a, @shop_a, @spu_a4, @sku_a4, 'SPU_DEMO_A4', 'SKU_DEMO_A4_STANDARD', '极简机械键盘 87 键', '静音轴', JSON_OBJECT('switch', '静音轴'), 'https://images.unsplash.com/photo-1587829741301-dc798b83add3?w=480&q=80', 499.00, 1, 499.00, 10.00, 509.00, 0, 0.00, 'LOCKED'),
-    (@order3b, @shop_b, @spu_b3, @sku_b3, 'SPU_DEMO_B3', 'SKU_DEMO_B3_STANDARD', '云朵护颈枕', '标准款', JSON_OBJECT('size', '标准款'), 'https://images.unsplash.com/photo-1584100936595-c0654b55a2e2?w=480&q=80', 159.00, 1, 159.00, 8.00, 167.00, 0, 0.00, 'RELEASED')
-ON DUPLICATE KEY UPDATE quantity = VALUES(quantity), reservation_status = VALUES(reservation_status), image_url = VALUES(image_url);
+SELECT @order1a, @shop_a, @spu_a3, @sku_a3, 'SPU_DEMO_A3', 'SKU_DEMO_A3_BLACK', '时光降噪耳机 Pro', '曜石黑', JSON_OBJECT('color', '曜石黑'), 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=480&q=80', 899.00, 1, 899.00, 10.00, 909.00, 0, 0.00, 'DEDUCTED'
+WHERE NOT EXISTS (SELECT 1 FROM order_item WHERE order_id = @order1a AND sku_id = @sku_a3);
+INSERT INTO order_item (
+    order_id, shop_id, spu_id, sku_id, spu_no, sku_no, product_name, sku_name, spec_json, image_url,
+    unit_price, quantity, original_amount, freight_amount, payable_amount, refunded_quantity,
+    refunded_amount, reservation_status
+)
+SELECT @order1b, @shop_b, @spu_b2, @sku_b2, 'SPU_DEMO_B2', 'SKU_DEMO_B2_GREEN', '晨光保温杯 480ml', '抹茶绿', JSON_OBJECT('color', '抹茶绿'), 'https://images.unsplash.com/photo-1602143407151-7111542de6e8?w=480&q=80', 129.00, 2, 258.00, 8.00, 266.00, 0, 0.00, 'DEDUCTED'
+WHERE NOT EXISTS (SELECT 1 FROM order_item WHERE order_id = @order1b AND sku_id = @sku_b2);
+INSERT INTO order_item (
+    order_id, shop_id, spu_id, sku_id, spu_no, sku_no, product_name, sku_name, spec_json, image_url,
+    unit_price, quantity, original_amount, freight_amount, payable_amount, refunded_quantity,
+    refunded_amount, reservation_status
+)
+SELECT @order2a, @shop_a, @spu_a4, @sku_a4, 'SPU_DEMO_A4', 'SKU_DEMO_A4_STANDARD', '极简机械键盘 87 键', '静音轴', JSON_OBJECT('switch', '静音轴'), 'https://images.unsplash.com/photo-1587829741301-dc798b83add3?w=480&q=80', 499.00, 1, 499.00, 10.00, 509.00, 0, 0.00, 'LOCKED'
+WHERE NOT EXISTS (SELECT 1 FROM order_item WHERE order_id = @order2a AND sku_id = @sku_a4);
+INSERT INTO order_item (
+    order_id, shop_id, spu_id, sku_id, spu_no, sku_no, product_name, sku_name, spec_json, image_url,
+    unit_price, quantity, original_amount, freight_amount, payable_amount, refunded_quantity,
+    refunded_amount, reservation_status
+)
+SELECT @order3b, @shop_b, @spu_b3, @sku_b3, 'SPU_DEMO_B3', 'SKU_DEMO_B3_STANDARD', '云朵护颈枕', '标准款', JSON_OBJECT('size', '标准款'), 'https://images.unsplash.com/photo-1584100936595-c0654b55a2e2?w=480&q=80', 159.00, 1, 159.00, 8.00, 167.00, 0, 0.00, 'RELEASED'
+WHERE NOT EXISTS (SELECT 1 FROM order_item WHERE order_id = @order3b AND sku_id = @sku_b3);
 
-SET @item1a = (SELECT id FROM order_item WHERE order_id = @order1a);
-SET @item1b = (SELECT id FROM order_item WHERE order_id = @order1b);
+-- order_item has no business-number unique key in the baseline schema. LIMIT 1
+-- keeps reruns compatible with demo rows that may have been inserted before a
+-- later statement failed, while preserving deterministic item references.
+SET @item1a = (SELECT id FROM order_item WHERE order_id = @order1a ORDER BY id LIMIT 1);
+SET @item1b = (SELECT id FROM order_item WHERE order_id = @order1b ORDER BY id LIMIT 1);
 
 -- Order histories make the status timeline pages useful immediately.
 INSERT INTO order_status_history (order_id, from_status, to_status, operation_type, operator_type, operator_id, remark)
@@ -311,7 +331,7 @@ VALUES
      DATE_SUB(CURRENT_TIMESTAMP(3), INTERVAL 2 HOUR)),
     ('AFTER_DEMO_002', @order1b, @item1b, @buyer_a, 'RETURN_REFUND', 1, 'NOT_WANTED',
      '颜色与预期不符，申请退货退款', JSON_ARRAY(), 129.00, 1, 129.00, 'WAITING_RETURN', @auditor,
-     '同意退货，请在 7 天内寄回', DATE_SUB(CURRENT_TIMESTAMP(3), INTERVAL 1 DAY), NULL, NULL, NULL, NULL, NULL,
+     '同意退货，请在 7 天内寄回', DATE_SUB(CURRENT_TIMESTAMP(3), INTERVAL 1 DAY), NULL, NULL, NULL, NULL, NULL, NULL,
      'NOT_STARTED', NULL, NULL, NULL, NULL, 1, DATE_SUB(CURRENT_TIMESTAMP(3), INTERVAL 2 DAY))
 ON DUPLICATE KEY UPDATE status = VALUES(status), approved_quantity = VALUES(approved_quantity),
     approved_amount = VALUES(approved_amount), review_comment = VALUES(review_comment),
