@@ -226,6 +226,13 @@ public class TaskExecutionService {
             InventoryStock before = stockMapper.selectOne(new LambdaQueryWrapper<InventoryStock>()
                     .eq(InventoryStock::getSkuId, item.getSkuId()));
             if (before == null || stockMapper.release(item.getSkuId(), item.getQuantity()) != 1) {
+                int lockedReservationQuantity = itemMapper.sumLockedQuantityBySkuId(item.getSkuId());
+                log.error("释放超时交易库存失败: tradeNo={}, orderNo={}, orderItemId={}, skuId={}, "
+                                + "itemQuantity={}, stockLockedQuantity={}, stockAvailableQuantity={}, "
+                                + "lockedReservationQuantity={}",
+                        trade.getTradeNo(), order.getOrderNo(), item.getId(), item.getSkuId(),
+                        item.getQuantity(), before == null ? null : before.getLockedQuantity(),
+                        before == null ? null : before.getAvailableQuantity(), lockedReservationQuantity);
                 throw BusinessException.conflict("LOCKED_INVENTORY_INCONSISTENT", "锁定库存不一致");
             }
             item.setReservationStatus(ReservationStatus.RELEASED);
