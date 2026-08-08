@@ -303,7 +303,7 @@ INSERT INTO after_sale_request (
     refund_failure_reason, refunded_at, completed_at, cancelled_at, version, created_at
 )
 VALUES
-    ('AFTER_DEMO_001', @order1a, @item1a, @buyer_a, 'REFUND_ONLY', 1, 'QUALITY_PROBLEM',
+('AFTER_DEMO_001', @order1a, @item1a, @buyer_a, 'REFUND_ONLY', 1, 'QUALITY_PROBLEM',
      '耳机左侧偶发断连，申请仅退款', JSON_ARRAY('https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=480&q=80'),
      899.00, NULL, NULL, 'PENDING',
      NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
