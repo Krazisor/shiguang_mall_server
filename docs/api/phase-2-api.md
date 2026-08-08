@@ -215,7 +215,7 @@
 | 方法 | 路径 | 幂等 | 请求/查询 | 成功 `data` |
 | --- | --- | --- | --- | --- |
 | GET | `/api/shops/{shopId}/inventory/transactions` | 否 | `skuId,transactionType,businessType,businessNo,createdFrom,createdTo,page,pageSize` | `Page<InventoryTransactionView>` |
-| POST | `/api/shops/{shopId}/inventory/{skuId}/adjustments` | 必填 | `InventoryAdjustmentRequest` | `InventoryOperationView`，`201` |
+| POST | `/api/shops/{shopId}/inventory/{skuId}/adjustments` | 必填 | `InventoryAdjustmentRequest` | `InventoryTransactionView`，`201` |
 
 ```json
 // InventoryAdjustmentRequest
@@ -246,6 +246,7 @@
   "lockedBefore": 3,
   "availableAfter": 18,
   "lockedAfter": 3,
+  "version": 8,
   "businessType": "MANUAL_ADJUSTMENT",
   "businessNo": "IA202607260001",
   "operator": {"id": "105", "username": "merchant_01", "nickname": "库存员"},
@@ -258,7 +259,7 @@
 
 ## 6. 买家售后
 
-创建申请要求登录、本人资源和 `after-sale:create`；资格、列表、详情、撤销及退货物流接口要求登录和本人资源。
+创建申请要求登录、本人资源和 `after-sale:create`；资格、列表、详情、撤销及退货物流接口要求登录和本人资源。提交申诉要求本人资源和 `after-sale:appeal`；查询申诉详情复用本人资源校验。
 
 ### 6.1 接口清单
 
@@ -271,6 +272,8 @@
 | POST | `/api/after-sales/{afterSaleId}/cancel` | 建议 | 无 | `AfterSaleDetailView` |
 | POST | `/api/after-sales/{afterSaleId}/return-shipment` | 必填 | `ReturnShipmentRequest` | `AfterSaleDetailView` |
 | PUT | `/api/after-sales/{afterSaleId}/return-shipment` | 否 | `UpdateReturnShipmentRequest` | `AfterSaleDetailView` |
+| POST | `/api/after-sales/{afterSaleId}/appeal` | 必填 | `CreateAfterSaleAppealRequest` | `AfterSaleAppealDetailView`，`201` |
+| GET | `/api/after-sales/{afterSaleId}/appeal` | 否 | 无 | `AfterSaleAppealDetailView` |
 
 ### 6.2 资格与申请
 
@@ -366,6 +369,7 @@
     "reviewedAt": "2026-07-27T10:00:00.000+08:00"
   },
   "returnShipment": null,
+  "appeal": null,
   "refundNo": null,
   "refundFailureReason": null,
   "refundedAt": null,
@@ -379,6 +383,61 @@
 ```
 
 业务错误：`AFTER_SALE_NOT_ELIGIBLE`、`AFTER_SALE_QUANTITY_EXCEEDED`、`AFTER_SALE_AMOUNT_EXCEEDED`、`AFTER_SALE_NOT_CANCELLABLE`、`RETURN_SHIPMENT_NOT_ALLOWED`、`RETURN_SHIPMENT_ALREADY_SUBMITTED`。
+
+### 6.5 售后申诉
+
+买家可以在商家拒绝后立即申诉，也可以在商家自售后申请创建起 48 个自然小时内没有处理时申诉。服务端根据数据库时间判断超时，不接受客户端自行传入“已超时”标记。每个售后单最多一条申诉；申诉提交后，商家不能再批准或拒绝原售后单，必须等待平台裁决。
+
+```json
+// CreateAfterSaleAppealRequest
+{
+  "reasonCode": "MERCHANT_REJECTED_UNREASONABLE",
+  "reasonDescription": "商品存在质量问题，补充提交开机故障视频",
+  "evidenceUrls": ["https://static.example.com/evidence/appeal-1.png"],
+  "version": 1
+}
+```
+
+字段规则：`reasonCode` 为 1..30 个字符；`reasonDescription` 去除首尾空白后为 1..500 个字符；凭证最多 9 个唯一 HTTPS URL；此处 `version` 必须等于当前售后版本。拒绝触发的申诉必须保存商家原审核快照；超时触发的申诉不生成商家审核快照。平台驳回申诉时 `status=REJECTED`，商家未处理超时申诉时 `status=PENDING` 且 `triggerType=MERCHANT_TIMEOUT`。
+
+平台裁决前，买家可以查看申诉状态；不提供买家撤回申诉接口。平台裁决后，申诉不可再次修改。
+
+```json
+// AfterSaleAppealDetailView
+{
+  "id": "1901",
+  "appealNo": "AP202608080001",
+  "afterSale": {
+    "afterSaleId": "1301",
+    "afterSaleNo": "AS202608080001",
+    "requestType": "RETURN_REFUND",
+    "status": "REJECTED",
+    "refundStatus": "NOT_STARTED",
+    "order": {"id": "711", "orderNo": "OR202608080001", "orderStatus": "PENDING_RECEIPT"},
+    "requestedAmount": "3999.00",
+    "approvedAmount": null
+  },
+  "triggerType": "MERCHANT_REJECTED",
+  "status": "PENDING",
+  "reasonCode": "MERCHANT_REJECTED_UNREASONABLE",
+  "reasonDescription": "补充提交商品故障视频",
+  "evidenceUrls": ["https://static.example.com/evidence/appeal-1.png"],
+  "merchantReview": {
+    "reviewerId": "105",
+    "comment": "提交凭证无法证明商品问题",
+    "reviewedAt": "2026-08-08T18:00:00.000+08:00"
+  },
+  "decision": null,
+  "approvedQuantity": null,
+  "approvedAmount": null,
+  "decidedBy": null,
+  "decisionComment": null,
+  "decidedAt": null,
+  "version": 0,
+  "createdAt": "2026-08-08T18:30:15.123+08:00",
+  "updatedAt": "2026-08-08T18:30:15.123+08:00"
+}
+```
 
 ## 7. 商家售后
 
@@ -445,7 +504,80 @@
 
 当前完整版本启用售后后，基础交易分册的发货和确认收货接口同时应用活跃售后保护：`POST /api/shops/{shopId}/orders/{orderId}/ship`、`POST /api/orders/{orderId}/complete` 遇到本订单 `PENDING`、`WAITING_RETURN`、`REFUNDING` 售后时返回 `409 ORDER_HAS_ACTIVE_AFTER_SALE`。自动确认收货任务使用相同判断。
 
-## 8. 平台运营只读查询
+## 8. 平台售后申诉裁决
+
+平台裁决接口使用独立权限 `platform:after-sale:manage`，不能使用 `platform:operation:read` 只读权限，也不能通过商家售后权限执行。
+
+### 8.1 接口清单
+
+| 方法 | 路径 | 幂等 | 请求/查询 | 成功 `data` |
+| --- | --- | --- | --- | --- |
+| GET | `/api/platform/after-sale-appeals` | 否 | `status,triggerType,shopId,afterSaleNo,createdFrom,createdTo,page,pageSize` | `Page<PlatformAfterSaleAppealSummaryView>` |
+| GET | `/api/platform/after-sale-appeals/{appealId}` | 否 | 无 | `PlatformAfterSaleAppealDetailView` |
+| POST | `/api/platform/after-sale-appeals/{appealId}/decide` | 必填 | `DecideAfterSaleAppealRequest` | `PlatformAfterSaleAppealDetailView` |
+
+```json
+// DecideAfterSaleAppealRequest
+{
+  "decision": "APPROVE",
+  "approvedQuantity": 1,
+  "approvedAmount": "3999.00",
+  "reviewComment": "证据充分，支持按原申请退货退款",
+  "version": 0
+}
+```
+
+`decision` 只能是 `APPROVE` 或 `REJECT`。`APPROVE` 必须沿用原售后单的 `requestType`：原申请为 `REFUND_ONLY` 时进入 `REFUNDING` 并立即执行退款；原申请为 `RETURN_REFUND` 时进入 `WAITING_RETURN`，等待买家提交或修正退货物流。平台不能把 `REFUND_ONLY` 改成退货，也不能把 `RETURN_REFUND` 静默改成仅退款。批准数量和金额必须由服务端重新计算，不能超过原申请和当前订单明细剩余额度；`REJECT` 时批准字段必须省略或为 `null`，且裁决原因必填。
+
+裁决请求中的 `version` 指当前申诉版本，不是买家创建申诉时使用的售后版本；服务端仍必须在锁内重新读取售后和订单明细，不能信任客户端提交的批准数量或金额。
+
+平台裁决在同一事务中完成：锁定申诉、售后、订单明细，校验版本和状态，写平台裁决信息；批准仅退款时复用原退款服务和 `refundNo` 幂等保护，批准退货退款时只切换到 `WAITING_RETURN`。裁决完成后，为目标店铺所有有效售后成员创建一条去重的商家通知。
+
+平台裁决错误：`APPEAL_NOT_FOUND`、`APPEAL_NOT_DECIDABLE`、`APPEAL_ALREADY_EXISTS`、`APPEAL_WINDOW_NOT_OPEN`、`APPEAL_VERSION_CONFLICT`、`AFTER_SALE_ALREADY_SETTLED`、`AFTER_SALE_APPROVAL_EXCEEDED`。
+
+```json
+// PlatformAfterSaleAppealDetailView（裁决成功后的核心字段）
+{
+  "appealNo": "AP202608080001",
+  "status": "APPROVED",
+  "decision": "APPROVE",
+  "approvedQuantity": 1,
+  "approvedAmount": "3999.00",
+  "decidedBy": {"id": "1", "username": "admin", "nickname": "平台管理员"},
+  "decisionComment": "证据充分，支持按原申请退货退款",
+  "decidedAt": "2026-08-08T19:00:00.000+08:00",
+  "afterSale": {"afterSaleNo": "AS202608080001", "status": "WAITING_RETURN", "refundStatus": "NOT_STARTED"}
+}
+```
+
+## 9. 商家申诉通知
+
+商家通知使用独立的 `shop:notification:read` 店铺权限。该权限同时覆盖通知查询和幂等的“标记已读”动作，因为标记已读不授予任何售后或资金操作能力。只有目标店铺有效成员可以查询本店通知；服务端只向拥有 `shop:after-sale:manage` 权限的有效成员投递售后申诉事件。
+
+| 方法 | 路径 | 幂等 | 请求/查询 | 成功 `data` |
+| --- | --- | --- | --- | --- |
+| GET | `/api/shops/{shopId}/notifications` | 否 | `unreadOnly,notificationType,page,pageSize` | `Page<MerchantNotificationView>` |
+| POST | `/api/shops/{shopId}/notifications/{notificationId}/read` | 否 | 无 | `MerchantNotificationView` |
+
+通知类型：`AFTER_SALE_APPEAL_SUBMITTED`、`AFTER_SALE_APPEAL_DECIDED`。重复投递使用 `(appealId, notificationType, recipientUserId)` 唯一键保护；标记已读是幂等操作。通知内容只包含处理所需的售后号、申诉号、裁决结果和原因，不在通知正文中重复完整身份证、地址或手机号。
+
+```json
+// MerchantNotificationView
+{
+  "id": "2001",
+  "notificationType": "AFTER_SALE_APPEAL_DECIDED",
+  "appealId": "1901",
+  "appealNo": "AP202608080001",
+  "afterSaleId": "1301",
+  "afterSaleNo": "AS202608080001",
+  "title": "售后申诉已有平台裁决",
+  "content": "平台批准了售后申诉，请按退货退款流程处理。",
+  "readAt": null,
+  "createdAt": "2026-08-08T19:00:00.123+08:00"
+}
+```
+
+## 10. 平台运营只读查询
 
 平台只读查询使用已写入权限种子的 `platform:operation:read`，由 `SUPER_ADMIN` 或自定义运营角色获得。接口不得复用 `platform:rbac:manage`。
 
@@ -455,11 +587,12 @@
 | GET | `/api/platform/operations/orders` | `orderNo,shopId,userId,orderStatus,paymentStatus,page,pageSize` | `Page<OperationOrderView>` |
 | GET | `/api/platform/operations/payments` | `paymentNo,tradeNo,status,page,pageSize` | `Page<OperationPaymentView>` |
 | GET | `/api/platform/operations/after-sales` | `afterSaleNo,shopId,userId,status,refundStatus,page,pageSize` | `Page<OperationAfterSaleView>` |
+| GET | `/api/platform/operations/after-sale-appeals` | `appealNo,afterSaleNo,shopId,status,page,pageSize` | `Page<OperationAfterSaleAppealView>` |
 | GET | `/api/platform/operations/business/{businessType}/{businessNo}` | 无 | `BusinessTraceView` |
 
 `BusinessTraceView` 聚合返回关联交易、子订单、支付、售后、库存流水和钱包流水的只读链接摘要，不允许通过该接口执行动作。列表手机号和地址脱敏；详情仅返回排障必要字段。
 
-## 9. 运维任务内部接口
+## 11. 运维任务内部接口
 
 定时任务默认不暴露公网 HTTP。为测试和内管手工触发，可在非生产环境提供以下接口，并要求 `platform:task:execute`、内网访问和显式配置 `market.internal-task-api-enabled=true`：
 
@@ -481,9 +614,9 @@
 
 `batchSize` 范围 `1..500`。对账接口 `dryRun` 固定为 `true`；当前范围不支持自动修复。生产环境未开启时返回 `404`，避免暴露管理面。
 
-## 10. 当前版本权限增量
+## 12. 当前版本权限增量
 
-为使两个接口分册的路径与数据库 RBAC 完全一致，当前版本必须在 `schema.sql` 后执行 `schema2.sql`，由该增量加入：
+为使两个接口分册的路径与数据库 RBAC 完全一致，当前版本的基础权限在 `schema.sql -> schema2.sql` 中提供；售后申诉和商家通知的新增权限由 `scheme3.sql` 提供，相关申诉、裁决和通知接口已实现。三期商家钱包权限也在同一迁移中，钱包接口见三期接口分册。
 
 | 权限代码 | 作用域 | 资源 |
 | --- | --- | --- |
@@ -491,9 +624,17 @@
 | `platform:operation:read` | `PLATFORM` | `/api/platform/operations/**` |
 | `platform:task:execute` | `PLATFORM` | `/api/internal/tasks/**` |
 
-`SUPER_ADMIN` 由 `schema2.sql` 显式补齐上述三项权限；`PLATFORM_PRODUCT_AUDITOR` 获得 `platform:catalog:manage`，以负责类目、类目属性模板和品牌基础资料。其余角色默认不获得新增权限，后续可由超级管理员在角色授权页面分配。
+申诉相关权限：
 
-## 11. 治理与售后错误码补充
+| 权限代码 | 作用域 | 资源 | 默认角色 |
+| --- | --- | --- | --- |
+| `after-sale:appeal` | `PLATFORM` | `/api/after-sales/*/appeal` | `CUSTOMER` |
+| `platform:after-sale:manage` | `PLATFORM` | `/api/platform/after-sale-appeals/**` | `PLATFORM_SHOP_ADMIN`、`SUPER_ADMIN` |
+| `shop:notification:read` | `SHOP` | `/api/shops/*/notifications/**` | `SHOP_ADMIN`、`SHOP_ORDER_OPERATOR` |
+
+`SUPER_ADMIN` 由 `schema2.sql` 显式补齐前三项权限，并由 `scheme3.sql` 显式获得 `platform:after-sale:manage`；`PLATFORM_SHOP_ADMIN` 同样默认获得该裁决权限。`CUSTOMER`、`SHOP_ADMIN` 和 `SHOP_ORDER_OPERATOR` 的申诉相关权限也由 `scheme3.sql` 幂等补齐。`PLATFORM_PRODUCT_AUDITOR` 获得 `platform:catalog:manage`，以负责类目、类目属性模板和品牌基础资料。其余角色默认不获得新增权限，后续可由超级管理员在角色授权页面分配。
+
+## 13. 治理与售后错误码补充
 
 | 模块 | 错误码 |
 | --- | --- |
@@ -502,6 +643,7 @@
 | 治理 | `PRODUCT_NOT_BANNABLE`、`PRODUCT_NOT_BANNED`、`PRODUCT_NOT_ON_SHELF` |
 | 库存 | `INVENTORY_ADJUSTMENT_NEGATIVE_RESULT`、`INVENTORY_LOCKED_BELOW_RESERVATIONS` |
 | 售后 | `AFTER_SALE_NOT_ELIGIBLE`、`AFTER_SALE_QUANTITY_EXCEEDED`、`AFTER_SALE_AMOUNT_EXCEEDED`、`AFTER_SALE_NOT_PENDING`、`AFTER_SALE_NOT_CANCELLABLE` |
+| 申诉 | `APPEAL_NOT_FOUND`、`APPEAL_ALREADY_EXISTS`、`APPEAL_WINDOW_NOT_OPEN`、`APPEAL_NOT_DECIDABLE`、`APPEAL_VERSION_CONFLICT`、`APPEAL_NOT_OWNER`、`APPEAL_PERMISSION_DENIED` |
 | 退货退款 | `RETURN_SHIPMENT_NOT_ALLOWED`、`RETURN_SHIPMENT_ALREADY_SUBMITTED`、`RETURN_NOT_SHIPPED`、`REFUND_NOT_RETRYABLE`、`REFUND_EXECUTION_FAILED` |
 | 订单保护 | `ORDER_HAS_ACTIVE_AFTER_SALE` |
 | 内部任务 | `TASK_ALREADY_RUNNING`、`RECONCILIATION_MISMATCH_FOUND`；接口未开启时按不存在处理并返回 `RESOURCE_NOT_FOUND` |

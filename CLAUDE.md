@@ -25,9 +25,9 @@
 | `cart` | 加购/数量/选择/删除/结算预览 | cart_item | ✅ 已完成 |
 | `order` | 交易/子订单/取消/发货/确认收货 | trade_order, order_info, order_item, order_status_history | ✅ 已完成 |
 | `payment` | 钱包/模拟充值/支付确认/流水 | wallet_account, payment_order, wallet_transaction | ✅ 已完成 |
-| `aftersale` | 售后申请/审核/退货物流/退款/重试 | after_sale_request | ❌ 仅 Entity+Mapper，无 Service/Controller |
-| `task` | 超时取消/自动收货/退款重试/对账/运营只读 | 无独占表（编排B线表） | ❌ 完全未实现 |
-| `integration` | 跨线端口 Adapter + Fake | — | ❌ 完全未实现 |
+| `aftersale` | 售后申请/审核/退货物流/退款/重试、申诉与商家通知 | after_sale_request、after_sale_appeal、merchant_notification | ✅ 已实现 |
+| `task` | 超时取消/自动收货/退款重试/对账/运营只读、结算和虚拟提现任务 | 无独占表（编排B线表） | ✅ 已实现 |
+| `integration` | 跨线端口 Adapter + Fake、商家结算 Adapter | — | ✅ 已实现 |
 
 ## B 线待完成工作（按优先级）
 

@@ -2,7 +2,7 @@
 
 ## 1. 目的与记法
 
-本文是[基础交易接口分册](phase-1-api.md)和[治理与售后接口分册](phase-2-api.md)中所有命名 DTO 的字段目录。分册文档中的 JSON 是实例，本文定义字段集合和类型；两者必须同时满足。
+本文是[基础交易接口分册](phase-1-api.md)、[治理与售后接口分册](phase-2-api.md)和[三期接口设计](phase-3-api.md)中所有命名 DTO 的字段目录。分册文档中的 JSON 是实例，本文定义字段集合和类型；两者必须同时满足。三期商家钱包 DTO 和对象存储上传 DTO 均已纳入当前实现。
 
 类型记法：
 
@@ -152,8 +152,8 @@
 | `ShopProductSummaryView` | `id:Id`、`spuNo:string`、`productName:string`、`coverUrl:string\|null`、`category:CategoryBrief`、`brand:BrandView\|null`、`status:ProductStatus`、`contentVersion:int`、`skuCount:int`、`enabledSkuCount:int`、`availableQuantity:int`、`lockedQuantity:int`、`createdAt:Timestamp`、`updatedAt:Timestamp` |
 | `ShopProductDetailView` | `id:Id`、`spuNo:string`、`productName:string`、`subtitle:string\|null`、`coverUrl:string\|null`、`galleryUrls:string[]`、`detailHtml:string\|null`、`packingList:string\|null`、`serviceNote:string\|null`、`shop:ShopSummary`、`category:CategoryBrief`、`brand:BrandView\|null`、`attributes:ProductAttributeDisplayView[]`、`status:ProductStatus`、`contentVersion:int`、`createdBy:UserSummary`、`updatedBy:UserSummary`、`skus:ShopSkuView[]`、`history:ProductStatusHistoryView[]`、`createdAt:Timestamp`、`updatedAt:Timestamp` |
 | `InventoryItemView` | `spuId:Id`、`spuNo:string`、`productName:string`、`sku:ShopSkuView` |
-| `InventoryOperationView` | `transactionNo:string`、`skuId:Id`、`transactionType:InventoryTransactionType`、`availableChange:int`、`lockedChange:int`、`availableAfter:int`、`lockedAfter:int`、`businessType:string`、`businessNo:string`、`remark:string\|null`、`createdAt:Timestamp` |
-| `InventoryTransactionView` | `id:Id`、`transactionNo:string`、`skuId:Id`、`transactionType:InventoryTransactionType`、`availableChange:int`、`lockedChange:int`、`availableBefore:int`、`lockedBefore:int`、`availableAfter:int`、`lockedAfter:int`、`businessType:string`、`businessNo:string`、`operator:OperatorBrief\|null`、`remark:string\|null`、`createdAt:Timestamp` |
+| `InventoryOperationView` | `transactionNo:string`、`skuId:Id`、`transactionType:InventoryTransactionType`、`availableChange:int`、`lockedChange:int`、`availableAfter:int`、`lockedAfter:int`、`businessType:string`、`businessNo:string`、`remark:string\|null`、`createdAt:Timestamp`；仅用于一期入库响应 |
+| `InventoryTransactionView` | `id:Id`、`transactionNo:string`、`skuId:Id`、`transactionType:InventoryTransactionType`、`availableChange:int`、`lockedChange:int`、`availableBefore:int`、`lockedBefore:int`、`availableAfter:int`、`lockedAfter:int`、`version:int`、`businessType:string`、`businessNo:string`、`operator:OperatorBrief\|null`、`remark:string\|null`、`createdAt:Timestamp` |
 
 ## 8. 平台店铺与目录
 
@@ -222,6 +222,8 @@
 | `RejectAfterSaleRequest` | `reviewComment:string`、`version:int` |
 | `ConfirmReturnReceivedRequest` | `remark:string\|null`、`version:int` |
 | `RetryRefundRequest` | `remark:string`、`version:int` |
+| `CreateAfterSaleAppealRequest` | `reasonCode:string`、`reasonDescription:string`、`evidenceUrls:string[]`、`version:int` |
+| `DecideAfterSaleAppealRequest` | `decision:AppealDecision`、`approvedQuantity:int\|null`、`approvedAmount:Money\|null`、`reviewComment:string`、`version:int` |
 
 ### 10.2 响应
 
@@ -233,13 +235,40 @@
 | `AfterSaleReviewView` | `reviewerId:Id`、`comment:string\|null`、`reviewedAt:Timestamp` |
 | `ReturnShipmentView` | `carrierCode:string`、`carrierName:string`、`trackingNo:string`、`returnedAt:Timestamp`、`receivedAt:Timestamp\|null` |
 | `AfterSaleSummaryView` | `id:Id`、`afterSaleNo:string`、`requestType:AfterSaleType`、`status:AfterSaleStatus`、`refundStatus:RefundStatus`、`order:AfterSaleOrderBrief`、`shop:ShopSummary`、`item:AfterSaleItemView`、`quantity:int`、`requestedAmount:Money`、`approvedAmount:Money\|null`、`createdAt:Timestamp`、`updatedAt:Timestamp` |
-| `AfterSaleDetailView` | `id:Id`、`afterSaleNo:string`、`requestType:AfterSaleType`、`status:AfterSaleStatus`、`refundStatus:RefundStatus`、`order:AfterSaleOrderBrief`、`shop:ShopSummary`、`item:AfterSaleItemView`、`quantity:int`、`requestedAmount:Money`、`approvedAmount:Money\|null`、`createdAt:Timestamp`、`updatedAt:Timestamp`、`reasonCode:string`、`reasonDescription:string\|null`、`evidenceUrls:string[]`、`approvedQuantity:int\|null`、`review:AfterSaleReviewView\|null`、`returnShipment:ReturnShipmentView\|null`、`refundNo:string\|null`、`refundFailureReason:string\|null`、`refundedAt:Timestamp\|null`、`completedAt:Timestamp\|null`、`cancelledAt:Timestamp\|null`、`version:int`、`availableActions:string[]` |
+| `AfterSaleDetailView` | `id:Id`、`afterSaleNo:string`、`requestType:AfterSaleType`、`status:AfterSaleStatus`、`refundStatus:RefundStatus`、`order:AfterSaleOrderBrief`、`shop:ShopSummary`、`item:AfterSaleItemView`、`quantity:int`、`requestedAmount:Money`、`approvedAmount:Money\|null`、`createdAt:Timestamp`、`updatedAt:Timestamp`、`reasonCode:string`、`reasonDescription:string\|null`、`evidenceUrls:string[]`、`approvedQuantity:int\|null`、`review:AfterSaleReviewView\|null`、`returnShipment:ReturnShipmentView\|null`、`appeal:AfterSaleAppealSummaryView\|null`、`refundNo:string\|null`、`refundFailureReason:string\|null`、`refundedAt:Timestamp\|null`、`completedAt:Timestamp\|null`、`cancelledAt:Timestamp\|null`、`version:int`、`availableActions:string[]` |
 | `ShopAfterSaleSummaryView` | `id:Id`、`afterSaleNo:string`、`requestType:AfterSaleType`、`status:AfterSaleStatus`、`refundStatus:RefundStatus`、`order:AfterSaleOrderBrief`、`shop:ShopSummary`、`item:AfterSaleItemView`、`quantity:int`、`requestedAmount:Money`、`approvedAmount:Money\|null`、`createdAt:Timestamp`、`updatedAt:Timestamp`、`buyer:UserSummary` |
-| `ShopAfterSaleDetailView` | `id:Id`、`afterSaleNo:string`、`requestType:AfterSaleType`、`status:AfterSaleStatus`、`refundStatus:RefundStatus`、`order:AfterSaleOrderBrief`、`shop:ShopSummary`、`item:AfterSaleItemView`、`quantity:int`、`requestedAmount:Money`、`approvedAmount:Money\|null`、`createdAt:Timestamp`、`updatedAt:Timestamp`、`reasonCode:string`、`reasonDescription:string\|null`、`evidenceUrls:string[]`、`approvedQuantity:int\|null`、`review:AfterSaleReviewView\|null`、`returnShipment:ReturnShipmentView\|null`、`refundNo:string\|null`、`refundFailureReason:string\|null`、`refundedAt:Timestamp\|null`、`completedAt:Timestamp\|null`、`cancelledAt:Timestamp\|null`、`version:int`、`availableActions:string[]`、`buyer:UserSummary`、`eligibilityAtReview:AfterSaleEligibilityView` |
+| `ShopAfterSaleDetailView` | `id:Id`、`afterSaleNo:string`、`requestType:AfterSaleType`、`status:AfterSaleStatus`、`refundStatus:RefundStatus`、`order:AfterSaleOrderBrief`、`shop:ShopSummary`、`item:AfterSaleItemView`、`quantity:int`、`requestedAmount:Money`、`approvedAmount:Money\|null`、`createdAt:Timestamp`、`updatedAt:Timestamp`、`reasonCode:string`、`reasonDescription:string\|null`、`evidenceUrls:string[]`、`approvedQuantity:int\|null`、`review:AfterSaleReviewView\|null`、`returnShipment:ReturnShipmentView\|null`、`appeal:AfterSaleAppealSummaryView\|null`、`refundNo:string\|null`、`refundFailureReason:string\|null`、`refundedAt:Timestamp\|null`、`completedAt:Timestamp\|null`、`cancelledAt:Timestamp\|null`、`version:int`、`availableActions:string[]`、`buyer:UserSummary`、`eligibilityAtReview:AfterSaleEligibilityView` |
 
-`AfterSaleType`：`REFUND_ONLY`、`RETURN_REFUND`。`AfterSaleStatus` 和 `RefundStatus` 取值以数据库设计为准。
+| `AfterSaleAppealAfterSaleView` | `afterSaleId:Id`、`afterSaleNo:string`、`requestType:AfterSaleType`、`status:AfterSaleStatus`、`refundStatus:RefundStatus`、`order:AfterSaleOrderBrief`、`requestedAmount:Money`、`approvedAmount:Money\|null` |
+| `AfterSaleAppealSummaryView` | `id:Id`、`appealNo:string`、`afterSaleId:Id`、`afterSaleNo:string`、`triggerType:AppealTriggerType`、`status:AppealStatus`、`createdAt:Timestamp`、`decidedAt:Timestamp\|null` |
+| `AfterSaleAppealDetailView` | `id:Id`、`appealNo:string`、`afterSale:AfterSaleAppealAfterSaleView`、`triggerType:AppealTriggerType`、`status:AppealStatus`、`reasonCode:string`、`reasonDescription:string`、`evidenceUrls:string[]`、`merchantReview:AfterSaleReviewView\|null`、`decision:AppealDecision\|null`、`approvedQuantity:int\|null`、`approvedAmount:Money\|null`、`decidedBy:OperatorBrief\|null`、`decisionComment:string\|null`、`decidedAt:Timestamp\|null`、`version:int`、`createdAt:Timestamp`、`updatedAt:Timestamp` |
+| `PlatformAfterSaleAppealSummaryView` | `AfterSaleAppealSummaryView`、`shop:ShopSummary`、`buyer:UserSummary`、`requestType:AfterSaleType`、`requestedAmount:Money` |
+| `PlatformAfterSaleAppealDetailView` | `AfterSaleAppealDetailView`、`shop:ShopSummary`、`buyer:UserSummary`、`order:AfterSaleOrderBrief`、`item:AfterSaleItemView` |
+| `OperationAfterSaleAppealView` | `id:Id`、`appealNo:string`、`afterSaleNo:string`、`shop:ShopSummary`、`buyer:UserSummary`、`triggerType:AppealTriggerType`、`status:AppealStatus`、`decision:AppealDecision\|null`、`createdAt:Timestamp`、`decidedAt:Timestamp\|null` |
+| `MerchantNotificationView` | `id:Id`、`notificationType:MerchantNotificationType`、`appealId:Id`、`appealNo:string`、`afterSaleId:Id`、`afterSaleNo:string`、`title:string`、`content:string`、`readAt:Timestamp\|null`、`createdAt:Timestamp` |
 
-## 11. 平台运营与内部任务
+| `MerchantWalletView` | `walletId:Id`、`shopId:Id`、`currency:string`、`status:MerchantWalletStatus`、`pendingBalance:Money`、`availableBalance:Money`、`frozenBalance:Money`、`lifetimeGrossIncome:Money`、`lifetimeCommission:Money`、`lifetimeRefund:Money`、`version:int`、`updatedAt:Timestamp` |
+| `MerchantWalletTransactionView` | `id:Id`、`transactionNo:string`、`transactionType:MerchantWalletTransactionType`、`direction:MerchantTransactionDirection`、`sourceBucket:MerchantWalletBucket\|null`、`targetBucket:MerchantWalletBucket\|null`、`bucket:MerchantWalletBucket`、`amount:Money`、`pendingBefore:Money`、`pendingAfter:Money`、`availableBefore:Money`、`availableAfter:Money`、`frozenBefore:Money`、`frozenAfter:Money`、`businessType:string`、`businessNo:string`、`orderId:Id\|null`、`orderNo:string\|null`、`withdrawalId:Id\|null`、`operator:OperatorBrief\|null`、`remark:string\|null`、`createdAt:Timestamp` |
+| `ShopSettlementView` | `settlementId:Id`、`shopId:Id`、`orderId:Id`、`orderNo:string\|null`、`tradeId:Id`、`tradeNo:string\|null`、`status:SettlementStatus`、`grossAmount:Money`、`commissionRate:string`、`commissionRefundable:boolean`、`commissionAmount:Money`、`buyerRefundAmount:Money`、`commissionRefundAmount:Money`、`merchantRefundAmount:Money`、`netAmount:Money`、`pendingAmount:Money`、`releasedAmount:Money`、`availableAt:Timestamp\|null`、`settledAt:Timestamp\|null`、`createdAt:Timestamp`、`updatedAt:Timestamp` |
+| `MerchantWithdrawalView` | `withdrawalId:Id`、`withdrawalNo:string`、`shopId:Id`、`status:MerchantWithdrawalStatus`、`amount:Money`、`feeAmount:Money`、`netAmount:Money`、`destinationType:WithdrawalDestinationType`、`destinationAccountMasked:string`、`failureReason:string\|null`、`requestedAt:Timestamp`、`completedAt:Timestamp\|null` |
+
+`AfterSaleType`：`REFUND_ONLY`、`RETURN_REFUND`。`AppealTriggerType`：`MERCHANT_REJECTED`、`MERCHANT_TIMEOUT`。`AppealStatus`：`PENDING`、`APPROVED`、`REJECTED`。`AppealDecision`：`APPROVE`、`REJECT`。`MerchantNotificationType`：`AFTER_SALE_APPEAL_SUBMITTED`、`AFTER_SALE_APPEAL_DECIDED`。`AfterSaleStatus` 和 `RefundStatus` 取值以数据库设计为准。
+
+## 11. 对象存储与图片上传
+
+multipart 请求中的文件本身不是 JSON DTO；上传成功后的统一响应 `data` 使用以下 DTO。
+
+| DTO | 字段 |
+| --- | --- |
+| `AssetUploadView` | `id:Id`、`assetNo:string`、`purpose:AssetPurpose`、`bucket:string`、`objectKey:string`、`originalFilename:string`、`contentType:string`、`sizeBytes:long`、`sha256:string`、`url:string`、`createdAt:Timestamp` |
+
+`AssetPurpose`：`AVATAR`、`SHOP_LOGO`、`BRAND_LOGO`、`PRODUCT_COVER`、`PRODUCT_GALLERY`、`SKU_IMAGE`、`RICH_TEXT_IMAGE`、`AFTER_SALE_EVIDENCE`、`APPEAL_EVIDENCE`。
+
+`AssetStatus`：`ACTIVE`、`DELETED`。`AssetStatus` 目前只用于数据库资源生命周期和内部查询，不作为上传请求字段；上传成功的资源固定返回 `ACTIVE` 对应的可用 URL。
+
+`AssetUploadView.url` 的访问模式取决于 `MINIO_PUBLIC_READ`：公开读时为稳定 URL，私有读时为有效期 1 小时的预签名 URL。私有 URL 不得长期写入业务字段。
+
+## 12. 平台运营与内部任务
 
 | DTO | 字段 |
 | --- | --- |
@@ -254,9 +283,9 @@
 
 平台运营列表中的联系方式均按接口文档脱敏。`BusinessTraceView` 只提供关联摘要，前端需要详情时再调用对应受权限保护的详情接口。
 
-## 12. DTO 变更检查
+## 13. DTO 变更检查
 
-### 12.1 常用字段校验矩阵
+### 13.1 常用字段校验矩阵
 
 | 字段 | 约束 |
 | --- | --- |
@@ -284,7 +313,7 @@
 
 后端先去除规定字段的首尾空白再做长度校验；保留商品详情 HTML 和买家/审核说明内部的换行。数组超过上限、含重复项或 URL 非法统一返回 `VALIDATION_FAILED`。
 
-### 12.2 变更检查
+### 13.2 变更检查
 
 每次修改 DTO 时必须检查：
 

@@ -86,7 +86,11 @@ erDiagram
 
     ORDER_INFO ||--o{ AFTER_SALE_REQUEST : has
     ORDER_ITEM ||--o{ AFTER_SALE_REQUEST : targets
+    AFTER_SALE_REQUEST ||--o| AFTER_SALE_APPEAL : appealed
+    AFTER_SALE_APPEAL ||--o{ MERCHANT_NOTIFICATION : notifies
 ```
+
+图中的 `AFTER_SALE_APPEAL` 和 `MERCHANT_NOTIFICATION` 是 `sql/scheme3.sql` 提供的增量实体；一期/二期 `schema.sql` 与 `schema2.sql` 的基线仍为 26 张表。
 
 `shop` 是店铺数据的租户边界。SPU、SKU、库存和子订单都能够沿外键关系确定所属店铺。`trade_order` 是买家一次提交和一次支付的父交易，`order_info` 是按店铺拆分后的履约子订单。
 
@@ -645,6 +649,42 @@ SKU 当前库存聚合表，每个 SKU 恰好维护一条库存记录。
 
 `(order_id, user_id)` 外键保证申请人与订单买家一致，`(order_item_id, order_id)` 外键保证明细属于该子订单。凭证只能是 JSON 数组。批准信息、审核信息、退货信息、退款字段和各时间字段均受状态 `CHECK` 约束。
 
+#### 4.7.2 `after_sale_appeal`
+
+该表保存买家针对一份具体售后申请发起的申诉，以及平台最终裁决。表结构由 `sql/scheme3.sql` 增量提供，不回写当前 `after_sale_request` 基线。
+
+| 字段 | 类型与空值 | 含义 |
+| --- | --- | --- |
+| `id`、`appeal_no` | `BIGINT UNSIGNED` 主键；`VARCHAR(64)` 非空唯一 | 申诉主键和业务编号 |
+| `after_sale_id` | `BIGINT UNSIGNED` 非空且唯一 | 关联售后申请；一份售后最多一条申诉 |
+| `shop_id` | `BIGINT UNSIGNED` 非空 | 目标店铺租户边界 |
+| `appellant_user_id` | `BIGINT UNSIGNED` 非空 | 发起申诉的买家 |
+| `trigger_type` | `VARCHAR(30)` 非空 | `MERCHANT_REJECTED` 或 `MERCHANT_TIMEOUT` |
+| `status` | `VARCHAR(20)` 非空 | `PENDING`、`APPROVED`、`REJECTED` |
+| `reason_code`、`reason_description`、`evidence_json` | 原因、说明和 JSON 凭证 | 买家申诉依据；凭证必须是数组 |
+| `merchant_reviewer_id`、`merchant_review_comment`、`merchant_reviewed_at` | 可空快照字段 | 申诉创建时复制商家原审核人、意见和时间；超时申诉为空 |
+| `decision`、`approved_quantity`、`approved_amount` | 可空 | 平台 `APPROVE/REJECT` 及批准数量、金额 |
+| `decided_by`、`decision_comment`、`decided_at` | 可空 | 平台操作者、裁决原因和时间 |
+| `version`、`created_at`、`updated_at` | 并发版本和审计时间 | 申诉创建与裁决的乐观锁字段 |
+
+数据库约束保证每份售后最多一条申诉；拒绝触发的申诉必须保存完整商家审核快照，超时触发的申诉快照为空；`PENDING` 不得有裁决字段，`APPROVED` 必须有正数批准数量/金额和完整裁决信息，`REJECTED` 的批准字段必须为空但必须记录裁决人、原因和时间。申诉记录不可物理删除。平台裁决事务按“申诉 -> 售后 -> 订单明细”加锁，并由应用服务驱动既有售后状态和退款流程。
+
+#### 4.7.3 `merchant_notification`
+
+该表保存投递给店铺有效售后成员的申诉事件通知。通知由应用按目标成员权限生成，数据库只保存事件和已读状态。
+
+| 字段 | 类型与空值 | 含义 |
+| --- | --- | --- |
+| `id` | `BIGINT UNSIGNED` 主键 | 通知 ID |
+| `shop_id`、`recipient_user_id` | 非空外键 | 店铺和接收成员 |
+| `appeal_id`、`after_sale_id` | 非空联合外键 | 对应申诉及其售后申请 |
+| `notification_type` | `VARCHAR(40)` 非空 | `AFTER_SALE_APPEAL_SUBMITTED` 或 `AFTER_SALE_APPEAL_DECIDED` |
+| `title`、`content` | 非空字符串 | 通知标题和处理所需内容 |
+| `read_at` | 可空时间 | 首次标记已读时间；重复标记保持原值 |
+| `created_at`、`updated_at` | 审计时间 | 创建和更新时间 |
+
+`(appeal_id, notification_type, recipient_user_id)` 唯一键保证同一事件不重复投递；联合外键同时保证通知中的申诉、售后和店铺关系一致。通知不可被其他店铺成员读取或修改，历史通知只允许保留，不因店铺成员离职而删除。
+
 ## 5. 最终业务约定
 
 ### 5.1 多商户与 RBAC
@@ -655,7 +695,7 @@ SKU 当前库存聚合表，每个 SKU 恰好维护一条库存记录。
 - 鉴权必须检查用户、角色、权限、店铺和店铺成员均处于有效状态。
 - 超级管理员只拥有平台作用域权限，不得跳过店铺接口的成员边界。
 
-种子角色包括：普通用户、平台店铺管理员、平台商品审核员、超级管理员、店铺管理员、店铺商品运营、店铺订单客服和店铺库存人员。平台商品审核员同时负责类目、类目属性模板和品牌基础资料。种子权限及角色权限映射以 `schema.sql` 第 8 节为基线，并叠加 `schema2.sql` 中的增量权限和授权。
+种子角色包括：普通用户、平台店铺管理员、平台商品审核员、超级管理员、店铺管理员、店铺商品运营、店铺订单客服和店铺库存人员。平台商品审核员同时负责类目、类目属性模板和品牌基础资料。种子权限及角色权限映射以 `schema.sql` 第 8 节为基线，并按顺序叠加 `schema2.sql` 及后续迁移中的增量权限和授权。
 
 ### 5.2 商品生命周期
 
@@ -846,6 +886,8 @@ PENDING -> CANCELLED
 
 `reason_code`、库存流水 `business_type` 和钱包流水 `business_type` 是开放的应用字典。它们不使用数据库 `CHECK`，但必须由 Java 枚举或统一字典集中管理，服务代码不得散落任意字符串。
 
+售后申诉和商家通知不属于当前 26 张表基线。后续增量迁移 `sql/scheme3.sql` 新增 `after_sale_appeal` 和 `merchant_notification`：申诉表保存买家申诉、商家审核快照、触发原因和平台最终裁决，通知表按“申诉 + 通知类型 + 接收人”唯一去重。平台裁决通过应用事务驱动既有 `after_sale_request` 状态和退款服务，不直接从数据库修改售后状态；通知只投递给目标店铺当时有效且具备售后处理权限的成员。
+
 ## 7. 定时任务
 
 - 扫描 `trade_order.trade_status = PENDING_PAYMENT` 且 `pay_expire_at < NOW()` 的父交易，取消全部子订单并释放库存。
@@ -859,6 +901,7 @@ PENDING -> CANCELLED
 
 - [`sql/schema.sql`](../../sql/schema.sql) 是不可重复执行的空库初始化基线，其中的 RBAC 种子数据同样只按空库执行设计。
 - [`sql/schema2.sql`](../../sql/schema2.sql) 是当前完整版本必需的基线后增量迁移，包含基础交易和治理接口共同依赖的权限、授权及既有种子元数据调整，可重复执行。
+- [`sql/scheme3.sql`](../../sql/scheme3.sql) 是后续增量迁移，新增本期售后申诉、商家通知，以及三期店铺商家钱包、结算、虚拟提现和对应权限；它不属于当前 26 张表基线，但与当前 Java 接口和任务实现配套。
 - 新空库必须先执行 `schema.sql`，再按编号顺序执行 `schema2.sql` 及后续迁移，不能仅执行基线后直接投入使用。
 - 已执行原始 `schema.sql` 的生产或存量环境只执行 `schema2.sql` 及尚未应用的后续迁移，不得再次执行 `schema.sql`。
 - 后续迁移必须保持编号顺序和幂等性，不得回写已经发布并执行过的历史脚本。

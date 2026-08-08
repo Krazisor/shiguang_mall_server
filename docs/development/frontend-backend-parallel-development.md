@@ -166,7 +166,7 @@ Content-Type: application/json
 | --- | --- | --- | --- |
 | `buyer_a` | `CUSTOMER` | 无 | 普通购买和售后 |
 | `buyer_b` | `CUSTOMER` | 无 | 资源越权测试 |
-| `platform_shop_admin` | `PLATFORM_SHOP_ADMIN` | 无 | 店铺管理 |
+| `platform_shop_admin` | `PLATFORM_SHOP_ADMIN` | 无 | 店铺管理和平台售后申诉裁决 |
 | `platform_auditor` | `PLATFORM_PRODUCT_AUDITOR` | 无 | 目录和商品审核 |
 | `super_admin` | `SUPER_ADMIN` | 无 | RBAC 和全局管理 |
 | `shop_a_admin` | `CUSTOMER` | A 店 `SHOP_ADMIN` | A 店全部业务 |
