@@ -33,6 +33,8 @@ import org.dhu.shiguang_market.order.model.OrderItem;
 import org.dhu.shiguang_market.order.model.OrderStatusHistory;
 import org.dhu.shiguang_market.identity.service.IdentityViewMapper;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.dhu.shiguang_market.integration.merchantwallet.MerchantSettlementPort;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
@@ -48,6 +50,7 @@ public class OrderService {
     private final ShopAccessService shopAccess;
     private final OrderViewService views;
     private final NumberGenerator numbers;
+    private MerchantSettlementPort merchantSettlement;
 
     public OrderService(OrderInfoMapper orderMapper, OrderItemMapper itemMapper,
                         OrderStatusHistoryMapper historyMapper, AfterSaleRequestMapper afterSaleMapper,
@@ -66,6 +69,11 @@ public class OrderService {
         this.shopAccess = shopAccess;
         this.views = views;
         this.numbers = numbers;
+    }
+
+    @Autowired(required = false)
+    public void setMerchantSettlement(MerchantSettlementPort merchantSettlement) {
+        this.merchantSettlement = merchantSettlement;
     }
 
     public PageView<OrderSummaryView> buyerOrders(
@@ -92,6 +100,7 @@ public class OrderService {
         order.setOrderStatus(OrderStatus.COMPLETED);
         order.setCompletedAt(LocalDateTime.now());
         orderMapper.updateById(order);
+        if (merchantSettlement != null) merchantSettlement.markOrderCompleted(order);
         historyMapper.insert(history(order.getId(), OrderStatus.PENDING_RECEIPT, OrderStatus.COMPLETED,
                 OrderOperationType.COMPLETE, OperatorType.USER, currentUser.id(), null));
         return views.detail(orderMapper.selectById(orderId));
@@ -174,7 +183,8 @@ public class OrderService {
      * PENDING、WAITING_RETURN、REFUNDING 都表示售后尚未结束，此时禁止继续推进订单。
      */
     private void requireNoActiveAfterSale(long orderId) {
-        if (afterSaleMapper.existsActiveByOrderId(orderId)) {
+        if (afterSaleMapper.existsActiveByOrderId(orderId)
+                || afterSaleMapper.existsPendingAppealByOrderId(orderId)) {
             throw BusinessException.conflict("ORDER_HAS_ACTIVE_AFTER_SALE", "订单存在活跃售后");
         }
     }

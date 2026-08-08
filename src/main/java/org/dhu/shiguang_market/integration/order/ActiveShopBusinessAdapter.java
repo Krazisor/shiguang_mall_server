@@ -31,10 +31,11 @@ public class ActiveShopBusinessAdapter implements ActiveShopBusinessPort {
                         OrderStatus.PENDING_SHIPMENT, OrderStatus.PENDING_RECEIPT));
         if (activeOrders) return true;
 
-        return afterSaleMapper.selectCount(new LambdaQueryWrapper<AfterSaleRequest>()
+        boolean activeAfterSale = afterSaleMapper.selectCount(new LambdaQueryWrapper<AfterSaleRequest>()
                 .in(AfterSaleRequest::getStatus, AfterSaleStatus.PENDING,
                         AfterSaleStatus.WAITING_RETURN, AfterSaleStatus.REFUNDING)
                 .inSql(AfterSaleRequest::getOrderId,
-                        "SELECT id FROM order_info WHERE shop_id = " + shopId)) > 0;
+                "SELECT id FROM order_info WHERE shop_id = " + shopId)) > 0;
+        return activeAfterSale || afterSaleMapper.existsPendingAppealByShopId(shopId);
     }
 }

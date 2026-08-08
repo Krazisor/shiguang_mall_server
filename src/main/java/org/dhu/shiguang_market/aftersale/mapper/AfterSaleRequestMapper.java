@@ -17,6 +17,28 @@ public interface AfterSaleRequestMapper extends BaseMapper<AfterSaleRequest> {
             """)
     boolean existsActiveByOrderId(@Param("orderId") long orderId);
 
+    /** 待裁决申诉继续保护订单，即使原售后已经被商家拒绝。 */
+    @Select("""
+            SELECT EXISTS(
+                SELECT 1
+                FROM after_sale_appeal appeal
+                JOIN after_sale_request request ON request.id = appeal.after_sale_id
+                WHERE request.order_id = #{orderId} AND appeal.status = 'PENDING'
+            )
+            """)
+    boolean existsPendingAppealByOrderId(@Param("orderId") long orderId);
+
+    @Select("""
+            SELECT EXISTS(
+                SELECT 1 FROM after_sale_appeal
+                WHERE after_sale_id = #{afterSaleId} AND status = 'PENDING'
+            )
+            """)
+    boolean existsPendingAppeal(@Param("afterSaleId") long afterSaleId);
+
+    @Select("SELECT EXISTS(SELECT 1 FROM after_sale_appeal WHERE shop_id = #{shopId} AND status = 'PENDING')")
+    boolean existsPendingAppealByShopId(@Param("shopId") long shopId);
+
     /** 交易取消时，仅联动撤销尚未进入审核流程的 PENDING 售后。 */
     @Update("""
             UPDATE after_sale_request

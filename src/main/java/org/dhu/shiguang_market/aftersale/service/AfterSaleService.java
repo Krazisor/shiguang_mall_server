@@ -25,6 +25,8 @@ import org.dhu.shiguang_market.aftersale.dto.AfterSaleDtos.ReturnShipmentRequest
 import org.dhu.shiguang_market.aftersale.dto.AfterSaleDtos.ReturnShipmentView;
 import org.dhu.shiguang_market.aftersale.dto.AfterSaleDtos.UpdateReturnShipmentRequest;
 import org.dhu.shiguang_market.aftersale.mapper.AfterSaleRequestMapper;
+import org.dhu.shiguang_market.aftersale.mapper.AfterSaleAppealMapper;
+import org.dhu.shiguang_market.aftersale.model.AfterSaleAppeal;
 import org.dhu.shiguang_market.aftersale.model.AfterSaleRequest;
 import org.dhu.shiguang_market.common.api.PageView;
 import org.dhu.shiguang_market.common.exception.BusinessException;
@@ -44,6 +46,7 @@ import org.dhu.shiguang_market.order.model.OrderItem;
 import org.dhu.shiguang_market.shop.mapper.ShopMapper;
 import org.dhu.shiguang_market.shop.model.Shop;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
@@ -69,6 +72,7 @@ public class AfterSaleService {
             "NOT_WANTED", "WRONG_ITEM", "DAMAGED", "QUALITY_PROBLEM", "MISSING_PARTS", "OTHER");
     private static final String MONEY_PATTERN = "^(0|[1-9][0-9]{0,15})\\.[0-9]{2}$";
     private final AfterSaleRequestMapper afterSaleMapper;
+    private final AfterSaleAppealMapper appealMapper;
     private final OrderItemMapper itemMapper;
     private final OrderInfoMapper orderMapper;
     private final ShopMapper shopMapper;
@@ -77,11 +81,14 @@ public class AfterSaleService {
     private final NumberGenerator numbers;
     private final ContentSafety contentSafety;
 
-    public AfterSaleService(AfterSaleRequestMapper afterSaleMapper, OrderItemMapper itemMapper,
+    @Autowired
+    public AfterSaleService(AfterSaleRequestMapper afterSaleMapper, AfterSaleAppealMapper appealMapper,
+                            OrderItemMapper itemMapper,
                             OrderInfoMapper orderMapper, ShopMapper shopMapper, CurrentUserService currentUser,
                             IdempotencyService idempotency, NumberGenerator numbers,
                             ContentSafety contentSafety) {
         this.afterSaleMapper = afterSaleMapper;
+        this.appealMapper = appealMapper;
         this.itemMapper = itemMapper;
         this.orderMapper = orderMapper;
         this.shopMapper = shopMapper;
@@ -89,6 +96,15 @@ public class AfterSaleService {
         this.idempotency = idempotency;
         this.numbers = numbers;
         this.contentSafety = contentSafety;
+    }
+
+    /** Backward-compatible constructor used by focused unit tests and legacy adapters. */
+    public AfterSaleService(AfterSaleRequestMapper afterSaleMapper, OrderItemMapper itemMapper,
+                            OrderInfoMapper orderMapper, ShopMapper shopMapper, CurrentUserService currentUser,
+                            IdempotencyService idempotency, NumberGenerator numbers,
+                            ContentSafety contentSafety) {
+        this(afterSaleMapper, null, itemMapper, orderMapper, shopMapper, currentUser,
+                idempotency, numbers, contentSafety);
     }
 
     // ══════════════════════════════════════════════════════════════
@@ -489,7 +505,7 @@ public class AfterSaleService {
                 ar.getQuantity(), ar.getReasonCode(), ar.getReasonDescription(), ar.getEvidenceJson(),
                 money(ar.getRequestedAmount()), ar.getApprovedQuantity(),
                 ar.getApprovedAmount() == null ? null : money(ar.getApprovedAmount()),
-                review(ar), shipment(ar), ar.getRefundNo(), ar.getRefundFailureReason(),
+                review(ar), shipment(ar), appealSummary(ar), ar.getRefundNo(), ar.getRefundFailureReason(),
                 time(ar.getRefundedAt()), time(ar.getCompletedAt()), time(ar.getCancelledAt()),
                 ar.getVersion(), time(ar.getCreatedAt()), time(ar.getUpdatedAt()),
                 availableActions(ar));
@@ -605,6 +621,18 @@ public class AfterSaleService {
         if (ar.getReturnTrackingNo() == null) return null;
         return new ReturnShipmentView(ar.getReturnCarrierCode(), ar.getReturnCarrierName(),
                 ar.getReturnTrackingNo(), time(ar.getReturnedAt()), time(ar.getReturnReceivedAt()));
+    }
+
+    private org.dhu.shiguang_market.aftersale.dto.AfterSaleDtos.AfterSaleAppealSummaryView appealSummary(
+            AfterSaleRequest request) {
+        if (appealMapper == null) return null;
+        AfterSaleAppeal appeal = appealMapper.selectOne(new LambdaQueryWrapper<AfterSaleAppeal>()
+                .eq(AfterSaleAppeal::getAfterSaleId, request.getId()));
+        if (appeal == null) return null;
+        return new org.dhu.shiguang_market.aftersale.dto.AfterSaleDtos.AfterSaleAppealSummaryView(
+                id(appeal.getId()), appeal.getAppealNo(), id(request.getId()), request.getAfterSaleNo(),
+                appeal.getTriggerType(), appeal.getStatus(), time(appeal.getCreatedAt()),
+                time(appeal.getDecidedAt()));
     }
 
     private ShopSummary shopSummary(Shop shop) {

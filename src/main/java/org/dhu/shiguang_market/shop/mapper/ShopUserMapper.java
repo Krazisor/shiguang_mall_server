@@ -94,4 +94,22 @@ public interface ShopUserMapper extends BaseMapper<ShopUser> {
             WHERE su.shop_id = #{shopId} AND su.user_id = #{userId} AND su.status = 'ACTIVE'
             """)
     List<String> selectPermissions(@Param("shopId") long shopId, @Param("userId") long userId);
+
+    /** 查询本店当前有效、且实际拥有指定权限的通知接收人。 */
+    @Select("""
+            SELECT DISTINCT su.user_id
+            FROM shop_user su
+            JOIN sys_user u ON u.id = su.user_id
+                AND u.status = 'ACTIVE' AND u.deleted_at IS NULL
+            JOIN sys_role r ON r.id = su.role_id
+                AND r.scope_type = 'SHOP' AND r.status = 'ACTIVE'
+            JOIN sys_role_permission rp ON rp.role_id = r.id AND rp.scope_type = 'SHOP'
+            JOIN sys_permission p ON p.id = rp.permission_id
+                AND p.scope_type = 'SHOP' AND p.status = 'ACTIVE'
+            WHERE su.shop_id = #{shopId} AND su.status = 'ACTIVE'
+              AND p.permission_code = #{permissionCode}
+            ORDER BY su.user_id
+            """)
+    List<Long> selectActiveUserIdsByPermission(@Param("shopId") long shopId,
+                                                @Param("permissionCode") String permissionCode);
 }

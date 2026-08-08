@@ -125,6 +125,7 @@ public class TaskExecutionService {
             for (OrderInfo order : orders) {
                 // 与人工确认收货使用相同的活跃售后口径。
                 if (!afterSaleMapper.existsActiveByOrderId(order.getId())
+                        && !afterSaleMapper.existsPendingAppealByOrderId(order.getId())
                         && completeShippedOrder(order.getId())) {
                     succeeded++;
                 }
@@ -251,7 +252,8 @@ public class TaskExecutionService {
         if (order == null || order.getOrderStatus() != OrderStatus.PENDING_RECEIPT
                 || order.getShippedAt() == null
                 || !order.getShippedAt().isBefore(LocalDateTime.now().minusDays(7))
-                || afterSaleMapper.existsActiveByOrderId(orderId)) {
+                || afterSaleMapper.existsActiveByOrderId(orderId)
+                || afterSaleMapper.existsPendingAppealByOrderId(orderId)) {
             return false;
         }
         order.setOrderStatus(OrderStatus.COMPLETED);

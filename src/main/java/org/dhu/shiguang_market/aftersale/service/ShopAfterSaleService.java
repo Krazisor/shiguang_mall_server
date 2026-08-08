@@ -47,7 +47,9 @@ import org.dhu.shiguang_market.payment.mapper.WalletTransactionMapper;
 import org.dhu.shiguang_market.payment.model.WalletAccount;
 import org.dhu.shiguang_market.payment.model.WalletTransaction;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.annotation.Transactional;
+import org.dhu.shiguang_market.integration.merchantwallet.MerchantSettlementPort;
 
 /**
  * 商家端售后 Service。
@@ -88,6 +90,7 @@ public class ShopAfterSaleService {
     private final ShopAccessService shopAccess;
     private final IdempotencyService idempotency;
     private final NumberGenerator numbers;
+    private MerchantSettlementPort merchantSettlement;
 
     public ShopAfterSaleService(AfterSaleRequestMapper afterSaleMapper, OrderItemMapper itemMapper,
                                 OrderInfoMapper orderMapper, InventoryStockMapper stockMapper,
@@ -109,6 +112,11 @@ public class ShopAfterSaleService {
         this.shopAccess = shopAccess;
         this.idempotency = idempotency;
         this.numbers = numbers;
+    }
+
+    @Autowired(required = false)
+    public void setMerchantSettlement(MerchantSettlementPort merchantSettlement) {
+        this.merchantSettlement = merchantSettlement;
     }
 
     // ══════════════════════════════════════════════════════════════
@@ -234,6 +242,7 @@ public class ShopAfterSaleService {
                                                     ApproveAfterSaleRequest request, String key, long operatorId) {
         // 1. 锁售后行，校验 PENDING 状态和 version
         AfterSaleRequest ar = scoped(shopId, afterSaleId, true);
+        requireNoPendingAppeal(ar.getId());
         if (ar.getStatus() != AfterSaleStatus.PENDING) {
             throw BusinessException.conflict("AFTER_SALE_NOT_PENDING", "只有待处理的申请可以审核");
         }
@@ -337,6 +346,7 @@ public class ShopAfterSaleService {
         shopAccess.require(shopId, "shop:after-sale:manage");
         long userId = currentUser.id();
         AfterSaleRequest ar = scoped(shopId, afterSaleId, true);
+        requireNoPendingAppeal(ar.getId());
         if (ar.getStatus() != AfterSaleStatus.PENDING) {
             throw BusinessException.conflict("AFTER_SALE_NOT_PENDING", "只有待处理的申请可以审核");
         }
@@ -600,6 +610,14 @@ public class ShopAfterSaleService {
         if (wallet == null) {
             throw BusinessException.unprocessable("WALLET_UNAVAILABLE", "钱包不存在");
         }
+        // 先校验买家钱包状态，再进入商家资金锁，避免商家结算已冲回而买家退款无法入账。
+        if (wallet.getStatus() != org.dhu.shiguang_market.common.model.MarketEnums.WalletStatus.ACTIVE) {
+            throw BusinessException.unprocessable("WALLET_UNAVAILABLE", "钱包不可用");
+        }
+        if (merchantSettlement != null
+                && !merchantSettlement.recordMerchantRefund(order, ar.getApprovedAmount(), ar.getRefundNo(), operatorId)) {
+            throw BusinessException.unprocessable("MERCHANT_WALLET_REFUND_INSUFFICIENT", "商家可冲回余额不足，需平台人工追缴");
+        }
         BigDecimal before = wallet.getBalance();
         // credit() 内部有 status='ACTIVE' 条件，非活跃钱包返回 0
         if (walletMapper.credit(ar.getUserId(), ar.getApprovedAmount()) != 1) {
@@ -760,7 +778,7 @@ public class ShopAfterSaleService {
                 base.order(), base.shop(), base.item(), base.quantity(), base.reasonCode(),
                 base.reasonDescription(), base.evidenceUrls(), base.requestedAmount(),
                 base.approvedQuantity(), base.approvedAmount(), base.review(),
-                base.returnShipment(), base.refundNo(), base.refundFailureReason(),
+                base.returnShipment(), base.appeal(), base.refundNo(), base.refundFailureReason(),
                 base.refundedAt(), base.completedAt(), base.cancelledAt(), base.version(),
                 base.createdAt(), base.updatedAt(), base.availableActions(), buyer(ar.getUserId()),
                 afterSaleService.eligibilityAtReview(ar));
@@ -781,5 +799,28 @@ public class ShopAfterSaleService {
             throw BusinessException.badRequest("VALIDATION_FAILED", field + "必须大于 0.00");
         }
         return value;
+    }
+
+    private void requireNoPendingAppeal(long afterSaleId) {
+        if (afterSaleMapper.existsPendingAppeal(afterSaleId)) {
+            throw BusinessException.conflict("APPEAL_NOT_DECIDABLE", "售后申诉待平台裁决，商家不能继续审核");
+        }
+    }
+
+    @Transactional
+    public void executePlatformRefund(long shopId, long afterSaleId, long operatorId) {
+        AfterSaleRequest ar = scoped(shopId, afterSaleId, true);
+        if (ar.getRequestType() != AfterSaleType.REFUND_ONLY || ar.getStatus() != AfterSaleStatus.REFUNDING) {
+            throw BusinessException.conflict("AFTER_SALE_NOT_PENDING", "平台批准的售后不可执行仅退款");
+        }
+        OrderItem item = itemMapper.selectById(ar.getOrderItemId());
+        try {
+            executeRefund(ar, item, operatorId);
+            releaseRefundOnlyStock(ar, item, operatorId);
+        } catch (BusinessException ex) {
+            ar.setRefundStatus(RefundStatus.FAILED);
+            ar.setRefundFailureReason(ex.getMessage());
+            afterSaleMapper.updateById(ar);
+        }
     }
 }

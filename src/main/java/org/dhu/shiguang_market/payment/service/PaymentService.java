@@ -37,6 +37,8 @@ import org.dhu.shiguang_market.payment.model.PaymentOrder;
 import org.dhu.shiguang_market.payment.model.WalletAccount;
 import org.dhu.shiguang_market.payment.model.WalletTransaction;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.dhu.shiguang_market.integration.merchantwallet.MerchantSettlementPort;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
@@ -50,7 +52,9 @@ public class PaymentService {
     private final CurrentUserService currentUser;
     private final IdempotencyService idempotency;
     private final NumberGenerator numbers;
+    private MerchantSettlementPort merchantSettlement;
 
+    @Autowired
     public PaymentService(PaymentOrderMapper paymentMapper, TradeOrderMapper tradeMapper,
                           OrderInfoMapper orderMapper, OrderStatusHistoryMapper historyMapper,
                           WalletAccountMapper walletMapper, WalletTransactionMapper walletTransactionMapper,
@@ -65,6 +69,11 @@ public class PaymentService {
         this.currentUser = currentUser;
         this.idempotency = idempotency;
         this.numbers = numbers;
+    }
+
+    @Autowired(required = false)
+    public void setMerchantSettlement(MerchantSettlementPort merchantSettlement) {
+        this.merchantSettlement = merchantSettlement;
     }
 
     @Transactional
@@ -175,6 +184,9 @@ public class PaymentService {
             history.setOperatorType(OperatorType.USER);
             history.setOperatorId(userId);
             historyMapper.insert(history);
+            if (merchantSettlement != null) {
+                merchantSettlement.recordPaidOrder(order, order.getPayableAmount());
+            }
         }
         return result(payment, trade, updatedWallet);
     }
