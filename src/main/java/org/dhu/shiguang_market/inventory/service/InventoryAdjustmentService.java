@@ -16,7 +16,6 @@ import org.dhu.shiguang_market.common.service.IdempotencyService;
 import org.dhu.shiguang_market.common.util.NumberGenerator;
 import org.dhu.shiguang_market.identity.mapper.SysUserMapper;
 import org.dhu.shiguang_market.inventory.dto.InventoryDtos.InventoryAdjustmentRequest;
-import org.dhu.shiguang_market.inventory.dto.InventoryDtos.InventoryOperationView;
 import org.dhu.shiguang_market.inventory.dto.InventoryDtos.InventoryTransactionView;
 import org.dhu.shiguang_market.inventory.mapper.InventoryStockMapper;
 import org.dhu.shiguang_market.inventory.mapper.InventoryTransactionMapper;
@@ -83,7 +82,7 @@ public class InventoryAdjustmentService {
      * 人工调整库存。幂等校验包裹实际操作，相同请求不会重复写入库存流水。
      */
     @Transactional
-    public InventoryOperationView adjust(long shopId, long skuId,
+    public InventoryTransactionView adjust(long shopId, long skuId,
                                          InventoryAdjustmentRequest request, String key) {
         var shop = shopAccess.require(shopId, "shop:inventory:manage");
         if (shop.getStatus() == ShopStatus.CLOSED) {
@@ -93,12 +92,12 @@ public class InventoryAdjustmentService {
         long userId = currentUser.id();
         String path = "/api/shops/" + shopId + "/inventory/" + skuId + "/adjustments";
         return idempotency.execute(userId, "POST", path, key, request,
-                InventoryOperationView.class,
+                InventoryTransactionView.class,
                 () -> adjustInventory(shopId, skuId, request, key, userId));
     }
 
     /** 锁定库存聚合行，完成数量、订单预占和乐观锁校验后写入调整流水。 */
-    private InventoryOperationView adjustInventory(long shopId, long skuId,
+    private InventoryTransactionView adjustInventory(long shopId, long skuId,
                                                    InventoryAdjustmentRequest request,
                                                    String key, long userId) {
         // 必须先校验 SKU 店铺归属，再读取幂等业务流水，避免跨店返回其他 SKU 的调整结果。
@@ -111,7 +110,7 @@ public class InventoryAdjustmentService {
                         .eq(InventoryTransaction::getBusinessType, "MANUAL_ADJUSTMENT")
                         .eq(InventoryTransaction::getBusinessNo, businessNo));
         if (existing != null) {
-            return operation(existing);
+            return transactionView(existing);
         }
 
         InventoryStock stock = stockMapper.selectOne(new LambdaQueryWrapper<InventoryStock>()
@@ -161,7 +160,7 @@ public class InventoryAdjustmentService {
         transaction.setOperatorId(userId);
         transaction.setRemark(request.reason().trim());
         transactionMapper.insert(transaction);
-        return operation(transactionMapper.selectById(transaction.getId()));
+        return transactionView(transactionMapper.selectById(transaction.getId()));
     }
 
     /** Service 层保留组合校验，保证直接调用时也不会接受无效调整。 */
@@ -185,13 +184,6 @@ public class InventoryAdjustmentService {
         return sku;
     }
 
-    private InventoryOperationView operation(InventoryTransaction value) {
-        return new InventoryOperationView(value.getTransactionNo(), id(value.getSkuId()),
-                value.getTransactionType(), value.getAvailableChange(), value.getLockedChange(),
-                value.getAvailableAfter(), value.getLockedAfter(), value.getBusinessType(),
-                value.getBusinessNo(), value.getRemark(), time(value.getCreatedAt()));
-    }
-
     /** 将流水实体转换为接口视图，不向接口暴露数据库实体。 */
     private InventoryTransactionView transactionView(InventoryTransaction value) {
         var operator = value.getOperatorId() == null ? null : userMapper.selectById(value.getOperatorId());
@@ -199,9 +191,16 @@ public class InventoryAdjustmentService {
                 value.getTransactionType(), value.getAvailableChange(), value.getLockedChange(),
                 value.getAvailableAfter() - value.getAvailableChange(),
                 value.getLockedAfter() - value.getLockedChange(),
-                value.getAvailableAfter(), value.getLockedAfter(), value.getBusinessType(), value.getBusinessNo(),
+                value.getAvailableAfter(), value.getLockedAfter(), stockVersion(value),
+                value.getBusinessType(), value.getBusinessNo(),
                 operator == null ? null : new OperatorBrief(id(operator.getId()), operator.getUsername(),
                         operator.getNickname()), value.getRemark(), time(value.getCreatedAt()));
+    }
+
+    private int stockVersion(InventoryTransaction value) {
+        InventoryStock stock = stockMapper.selectOne(new LambdaQueryWrapper<InventoryStock>()
+                .eq(InventoryStock::getSkuId, value.getSkuId()));
+        return stock == null || stock.getVersion() == null ? 0 : stock.getVersion();
     }
 
     private String normalize(String value) {

@@ -16,6 +16,12 @@ import org.dhu.shiguang_market.task.dto.OperationDtos.OperationOrderView;
 import org.dhu.shiguang_market.task.dto.OperationDtos.OperationPaymentView;
 import org.dhu.shiguang_market.task.dto.OperationDtos.OperationTradeView;
 import org.dhu.shiguang_market.task.service.PlatformOperationService;
+import org.dhu.shiguang_market.merchantwallet.dto.MerchantWalletDtos.MerchantWalletTransactionView;
+import org.dhu.shiguang_market.merchantwallet.dto.MerchantWalletDtos.MerchantWalletView;
+import org.dhu.shiguang_market.merchantwallet.dto.MerchantWalletDtos.MerchantWithdrawalView;
+import org.dhu.shiguang_market.merchantwallet.dto.MerchantWalletDtos.ShopSettlementView;
+import org.dhu.shiguang_market.merchantwallet.service.MerchantWalletService;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -30,10 +36,18 @@ public class PlatformOperationController {
     private static final String READ_PERMISSION = "platform:operation:read";
     private final PlatformOperationService service;
     private final CurrentUserService currentUser;
+    private final MerchantWalletService merchantWallet;
 
-    public PlatformOperationController(PlatformOperationService service, CurrentUserService currentUser) {
+    @Autowired
+    public PlatformOperationController(PlatformOperationService service, CurrentUserService currentUser,
+                                       MerchantWalletService merchantWallet) {
         this.service = service;
         this.currentUser = currentUser;
+        this.merchantWallet = merchantWallet;
+    }
+
+    public PlatformOperationController(PlatformOperationService service, CurrentUserService currentUser) {
+        this(service, currentUser, null);
     }
 
     @GetMapping("/trades")
@@ -96,6 +110,30 @@ public class PlatformOperationController {
                                                 @PathVariable String businessNo) {
         authorize();
         return ApiResponse.success(service.trace(businessType, businessNo));
+    }
+
+    @GetMapping("/merchant-wallets")
+    public ApiResponse<PageView<MerchantWalletView>> merchantWallets(@RequestParam(required = false) Long shopId,
+            @RequestParam(defaultValue = "1") long page, @RequestParam(defaultValue = "20") long pageSize) {
+        authorize(); return ApiResponse.success(merchantWallet.platformWallets(shopId, page, pageSize));
+    }
+
+    @GetMapping("/merchant-wallet-transactions")
+    public ApiResponse<PageView<MerchantWalletTransactionView>> merchantWalletTransactions(@RequestParam(required = false) Long shopId,
+            @RequestParam(defaultValue = "1") long page, @RequestParam(defaultValue = "20") long pageSize) {
+        authorize(); return ApiResponse.success(merchantWallet.platformTransactions(shopId, page, pageSize));
+    }
+
+    @GetMapping("/settlements")
+    public ApiResponse<PageView<ShopSettlementView>> settlements(@RequestParam(required = false) Long shopId,
+            @RequestParam(defaultValue = "1") long page, @RequestParam(defaultValue = "20") long pageSize) {
+        authorize(); return ApiResponse.success(merchantWallet.platformSettlements(shopId, page, pageSize));
+    }
+
+    @GetMapping("/withdrawals")
+    public ApiResponse<PageView<MerchantWithdrawalView>> withdrawals(@RequestParam(required = false) Long shopId,
+            @RequestParam(defaultValue = "1") long page, @RequestParam(defaultValue = "20") long pageSize) {
+        authorize(); return ApiResponse.success(merchantWallet.platformWithdrawals(shopId, page, pageSize));
     }
 
     /** 每个入口显式执行同一权限检查，便于独立测试，也与现有平台接口保持一致。 */

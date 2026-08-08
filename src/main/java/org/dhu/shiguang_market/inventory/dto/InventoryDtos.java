@@ -36,7 +36,7 @@ public final class InventoryDtos {
     public record InventoryTransactionView(
             String id, String transactionNo, String skuId, InventoryTransactionType transactionType,
             int availableChange, int lockedChange, int availableBefore, int lockedBefore,
-            int availableAfter, int lockedAfter, String businessType, String businessNo,
+            int availableAfter, int lockedAfter, int version, String businessType, String businessNo,
             OperatorBrief operator, String remark, OffsetDateTime createdAt) {
     }
 }

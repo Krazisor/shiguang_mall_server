@@ -6,7 +6,6 @@ import org.dhu.shiguang_market.common.api.ApiResponse;
 import org.dhu.shiguang_market.common.api.PageView;
 import org.dhu.shiguang_market.common.model.MarketEnums.InventoryTransactionType;
 import org.dhu.shiguang_market.inventory.dto.InventoryDtos.InventoryAdjustmentRequest;
-import org.dhu.shiguang_market.inventory.dto.InventoryDtos.InventoryOperationView;
 import org.dhu.shiguang_market.inventory.dto.InventoryDtos.InventoryTransactionView;
 import org.dhu.shiguang_market.inventory.service.InventoryAdjustmentService;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -51,7 +50,7 @@ public class InventoryAdjustmentController {
 
     /** 人工调整指定 SKU 的可用库存和锁定库存，成功时返回 201。 */
     @PostMapping("/{skuId}/adjustments")
-    public ResponseEntity<ApiResponse<InventoryOperationView>> adjust(
+    public ResponseEntity<ApiResponse<InventoryTransactionView>> adjust(
             @PathVariable long shopId,
             @PathVariable long skuId,
             @Valid @RequestBody InventoryAdjustmentRequest request,
