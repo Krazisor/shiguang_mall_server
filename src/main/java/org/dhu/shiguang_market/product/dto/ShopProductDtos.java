@@ -181,4 +181,10 @@ public final class ShopProductDtos {
 
     public record ReviewDecisionRequest(@Min(0) int contentVersion, @Size(max = 500) String reason) {
     }
+
+    /** 平台禁售、解禁和强制下架共用的治理请求。 */
+    public record ProductGovernanceRequest(
+            @Min(0) int contentVersion,
+            @NotBlank @Size(max = 500) String reason) {
+    }
 }

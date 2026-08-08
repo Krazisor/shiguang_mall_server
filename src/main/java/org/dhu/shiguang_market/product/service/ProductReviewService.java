@@ -20,6 +20,7 @@ import org.dhu.shiguang_market.product.dto.ProductDtos.BrandView;
 import org.dhu.shiguang_market.product.dto.ProductDtos.CategoryBrief;
 import org.dhu.shiguang_market.product.dto.ProductDtos.ProductAttributeDisplayView;
 import org.dhu.shiguang_market.product.dto.ShopProductDtos.OperatorBrief;
+import org.dhu.shiguang_market.product.dto.ShopProductDtos.ProductGovernanceRequest;
 import org.dhu.shiguang_market.product.dto.ShopProductDtos.ProductReviewDetailView;
 import org.dhu.shiguang_market.product.dto.ShopProductDtos.ProductReviewSkuView;
 import org.dhu.shiguang_market.product.dto.ShopProductDtos.ProductReviewSummaryView;
@@ -119,6 +120,75 @@ public class ProductReviewService {
                 time(spu.getCreatedAt()), time(spu.getUpdatedAt()));
     }
 
+    /**
+     * 分页查询指定商品的全部状态历史。
+     *
+     * <p>历史记录按最新操作优先返回，便于平台人员直接查看最近一次治理结果。</p>
+     */
+    public PageView<ProductStatusHistoryView> history(long spuId, long page, long pageSize) {
+        currentUser.requirePermission("platform:product:audit");
+        if (page < 1 || pageSize < 1 || pageSize > 100) {
+            throw BusinessException.badRequest("BAD_REQUEST", "分页参数超出范围");
+        }
+        if (spuMapper.selectById(spuId) == null) {
+            throw BusinessException.notFound("PRODUCT_NOT_FOUND", "商品不存在");
+        }
+        Page<ProductStatusHistory> result = historyMapper.selectPage(Page.of(page, pageSize),
+                new LambdaQueryWrapper<ProductStatusHistory>()
+                        .eq(ProductStatusHistory::getSpuId, spuId)
+                        .orderByDesc(ProductStatusHistory::getCreatedAt)
+                        .orderByDesc(ProductStatusHistory::getId));
+        return PageView.of(result, result.getRecords().stream().map(this::history).toList());
+    }
+
+    /**
+     * 禁售上架或已下架商品。
+     */
+    @Transactional
+    public ProductReviewDetailView ban(long spuId, ProductGovernanceRequest request) {
+        currentUser.requirePermission("platform:product:ban");
+        long operatorId = currentUser.id();
+        ProductSpu spu = requireProductForUpdate(spuId);
+        String reason = validateGovernanceRequest(spu, request);
+        if (spu.getStatus() != ProductStatus.OFF_SHELF && spu.getStatus() != ProductStatus.ON_SHELF) {
+            throw BusinessException.conflict("PRODUCT_NOT_BANNABLE", "当前商品状态不允许禁售");
+        }
+        return changeGovernanceStatus(spu, ProductStatus.BANNED,
+                ProductOperationType.BAN, operatorId, reason);
+    }
+
+    /**
+     * 解除商品禁售。解禁后统一回到下架状态，避免商品未经店铺确认直接恢复销售。
+     */
+    @Transactional
+    public ProductReviewDetailView revokeBan(long spuId, ProductGovernanceRequest request) {
+        currentUser.requirePermission("platform:product:ban");
+        long operatorId = currentUser.id();
+        ProductSpu spu = requireProductForUpdate(spuId);
+        String reason = validateGovernanceRequest(spu, request);
+        if (spu.getStatus() != ProductStatus.BANNED) {
+            throw BusinessException.conflict("PRODUCT_NOT_BANNED", "商品不在禁售状态");
+        }
+        return changeGovernanceStatus(spu, ProductStatus.OFF_SHELF,
+                ProductOperationType.UNBAN, operatorId, reason);
+    }
+
+    /**
+     * 平台强制下架正在销售的商品，并保留治理原因供后续追溯。
+     */
+    @Transactional
+    public ProductReviewDetailView takeOffShelf(long spuId, ProductGovernanceRequest request) {
+        currentUser.requirePermission("platform:product:ban");
+        long operatorId = currentUser.id();
+        ProductSpu spu = requireProductForUpdate(spuId);
+        String reason = validateGovernanceRequest(spu, request);
+        if (spu.getStatus() != ProductStatus.ON_SHELF) {
+            throw BusinessException.conflict("PRODUCT_NOT_ON_SHELF", "商品不在上架状态");
+        }
+        return changeGovernanceStatus(spu, ProductStatus.OFF_SHELF,
+                ProductOperationType.TAKE_OFF_SHELF, operatorId, reason);
+    }
+
     @Transactional
     public ProductReviewDetailView approve(long spuId, ReviewDecisionRequest request) {
         return decide(spuId, request, true);
@@ -153,23 +223,12 @@ public class ProductReviewService {
         history.setOperatorId(currentUser.id());
         history.setReason(request.reason());
         historyMapper.insert(history);
-        // The review detail contract is for pending content; build the same shape after transition.
-        ProductReviewDetailView response = detailSnapshot(spu);
-        return new ProductReviewDetailView(response.id(), response.spuNo(), response.productName(), response.subtitle(),
-                response.coverUrl(), response.galleryUrls(), response.detailHtml(), response.packingList(), response.serviceNote(),
-                response.shop(), response.category(), response.brand(), response.attributes(), response.skus(), target,
-                response.contentVersion(), response.createdBy(), response.updatedBy(),
-                historyMapper.selectList(new LambdaQueryWrapper<ProductStatusHistory>()
-                        .eq(ProductStatusHistory::getSpuId, spuId).orderByAsc(ProductStatusHistory::getCreatedAt)).stream()
-                        .map(this::history).toList(), response.createdAt(), response.updatedAt());
-    }
-
-    private ProductReviewDetailView detailSnapshot(ProductSpu spu) {
-        return buildDetail(spu);
+        // 状态已发生变化，直接按当前 SPU 快照组装响应，不再要求商品仍处于待审核状态。
+        return detailWithHistory(spu);
     }
 
     private ProductReviewDetailView buildDetail(ProductSpu spu) {
-        // Temporarily use direct builder so the response remains available after the state transition.
+        // 直接按当前商品快照组装详情，使审核、禁售等状态变更后仍能返回统一结构。
         Shop shop = shopMapper.selectById(spu.getShopId());
         ProductCategory category = categoryMapper.selectById(spu.getCategoryId());
         ProductBrand brand = spu.getBrandId() == null ? null : brandMapper.selectById(spu.getBrandId());
@@ -189,6 +248,68 @@ public class ProductReviewService {
                 brand == null ? null : new BrandView(id(brand.getId()), brand.getBrandCode(), brand.getBrandName(), brand.getLogoUrl(), brand.getStatus()),
                 attributes, skus, spu.getStatus(), spu.getContentVersion(), IdentityViewMapper.user(userMapper.selectById(spu.getCreatedBy())),
                 IdentityViewMapper.user(userMapper.selectById(spu.getUpdatedBy())), List.of(), time(spu.getCreatedAt()), time(spu.getUpdatedAt()));
+    }
+
+    /** 写入一次平台治理状态变化，并返回包含最新历史的商品详情。 */
+    private ProductReviewDetailView changeGovernanceStatus(ProductSpu spu, ProductStatus target,
+                                                            ProductOperationType operation,
+                                                            long operatorId, String reason) {
+        ProductStatus source = spu.getStatus();
+        spu.setStatus(target);
+        spu.setUpdatedBy(operatorId);
+        spuMapper.updateById(spu);
+
+        ProductStatusHistory history = new ProductStatusHistory();
+        history.setSpuId(spu.getId());
+        history.setFromStatus(source);
+        history.setToStatus(target);
+        history.setOperationType(operation);
+        history.setContentVersion(spu.getContentVersion());
+        history.setOperatorType(OperatorType.PLATFORM);
+        history.setOperatorId(operatorId);
+        history.setReason(reason);
+        historyMapper.insert(history);
+        return detailWithHistory(spu);
+    }
+
+    /** 校验治理请求使用的是当前商品内容版本，并统一清理原因两端空白。 */
+    private String validateGovernanceRequest(ProductSpu spu, ProductGovernanceRequest request) {
+        if (request == null || request.contentVersion() < 0
+                || request.reason() == null || request.reason().trim().isEmpty()
+                || request.reason().trim().length() > 500) {
+            throw BusinessException.badRequest("VALIDATION_FAILED", "治理原因必填且长度不能超过 500");
+        }
+        if (spu.getContentVersion() != request.contentVersion()) {
+            throw BusinessException.conflict("VERSION_CONFLICT", "商品内容版本已变化");
+        }
+        return request.reason().trim();
+    }
+
+    /** 查询并锁定商品，防止两个治理操作并发修改同一状态。 */
+    private ProductSpu requireProductForUpdate(long spuId) {
+        ProductSpu spu = spuMapper.selectOne(new LambdaQueryWrapper<ProductSpu>()
+                .eq(ProductSpu::getId, spuId)
+                .last("FOR UPDATE"));
+        if (spu == null) {
+            throw BusinessException.notFound("PRODUCT_NOT_FOUND", "商品不存在");
+        }
+        return spu;
+    }
+
+    /** 在基础详情中补齐该商品的完整状态历史。 */
+    private ProductReviewDetailView detailWithHistory(ProductSpu spu) {
+        ProductReviewDetailView response = buildDetail(spu);
+        List<ProductStatusHistoryView> history = historyMapper.selectList(
+                        new LambdaQueryWrapper<ProductStatusHistory>()
+                                .eq(ProductStatusHistory::getSpuId, spu.getId())
+                                .orderByAsc(ProductStatusHistory::getCreatedAt)
+                                .orderByAsc(ProductStatusHistory::getId))
+                .stream().map(this::history).toList();
+        return new ProductReviewDetailView(response.id(), response.spuNo(), response.productName(), response.subtitle(),
+                response.coverUrl(), response.galleryUrls(), response.detailHtml(), response.packingList(),
+                response.serviceNote(), response.shop(), response.category(), response.brand(), response.attributes(),
+                response.skus(), spu.getStatus(), response.contentVersion(), response.createdBy(), response.updatedBy(),
+                history, response.createdAt(), response.updatedAt());
     }
 
     private ProductReviewSummaryView summary(ProductSpu spu) {

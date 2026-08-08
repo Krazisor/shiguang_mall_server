@@ -29,6 +29,8 @@ public class PlatformShopController {
         this.service = service;
     }
 
+
+
     @GetMapping
     public ApiResponse<PageView<PlatformShopView>> list(
             @RequestParam(required = false) ShopStatus status,
