@@ -70,6 +70,25 @@ public interface SysUserMapper extends BaseMapper<SysUser> {
             """)
     int countActiveUsersWithPermission(@Param("permissionCode") String permissionCode);
 
+    /**
+     * 统计不依赖指定角色仍可获得目标权限的 ACTIVE 用户，用于角色停用和权限替换保护。
+     */
+    @Select("""
+            SELECT COUNT(DISTINCT u.id) FROM sys_user u
+            JOIN sys_user_role ur ON ur.user_id = u.id
+                AND ur.role_scope = 'PLATFORM' AND ur.role_id <> #{excludedRoleId}
+            JOIN sys_role r ON r.id = ur.role_id
+                AND r.scope_type = 'PLATFORM' AND r.status = 'ACTIVE'
+            JOIN sys_role_permission rp ON rp.role_id = r.id AND rp.scope_type = 'PLATFORM'
+            JOIN sys_permission p ON p.id = rp.permission_id
+                AND p.scope_type = 'PLATFORM' AND p.status = 'ACTIVE'
+            WHERE u.status = 'ACTIVE' AND u.deleted_at IS NULL
+              AND p.permission_code = #{permissionCode}
+            """)
+    int countActiveUsersWithPermissionExcludingRole(
+            @Param("permissionCode") String permissionCode,
+            @Param("excludedRoleId") long excludedRoleId);
+
     @Select("""
             SELECT DISTINCT r.role_code
             FROM sys_user_role ur

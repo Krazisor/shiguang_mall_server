@@ -1,12 +1,56 @@
 package org.dhu.shiguang_market.identity.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import java.util.List;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
+import org.dhu.shiguang_market.common.model.MarketEnums.ActiveStatus;
+import org.dhu.shiguang_market.common.model.MarketEnums.ScopeType;
 import org.dhu.shiguang_market.identity.model.SysRole;
 
 public interface SysRoleMapper extends BaseMapper<SysRole> {
+    /** 按作用域、状态和关键词分页查询角色。 */
+    @Select("""
+            <script>
+            SELECT * FROM sys_role
+            WHERE 1 = 1
+            <if test="scopeType != null">AND scope_type = #{scopeType}</if>
+            <if test="status != null">AND status = #{status}</if>
+            <if test="keyword != null and keyword != ''">
+              AND (role_code LIKE CONCAT('%', #{keyword}, '%')
+                   OR role_name LIKE CONCAT('%', #{keyword}, '%'))
+            </if>
+            ORDER BY created_at DESC, id DESC
+            </script>
+            """)
+    Page<SysRole> selectRolePage(
+            Page<SysRole> page,
+            @Param("scopeType") ScopeType scopeType,
+            @Param("status") ActiveStatus status,
+            @Param("keyword") String keyword);
+
+    /** 创建角色前检查角色代码是否已经存在。 */
+    @Select("SELECT EXISTS(SELECT 1 FROM sys_role WHERE role_code = #{roleCode})")
+    boolean existsByRoleCode(@Param("roleCode") String roleCode);
+
+    /** 写操作读取角色时加行锁，避免状态和权限替换互相覆盖。 */
+    @Select("SELECT * FROM sys_role WHERE id = #{roleId} FOR UPDATE")
+    SysRole selectRoleForUpdate(@Param("roleId") long roleId);
+
+    /** 判断有效角色是否直接拥有指定的有效权限。 */
+    @Select("""
+            SELECT EXISTS(
+                SELECT 1 FROM sys_role r
+                JOIN sys_role_permission rp ON rp.role_id = r.id
+                JOIN sys_permission p ON p.id = rp.permission_id
+                WHERE r.id = #{roleId} AND r.status = 'ACTIVE'
+                  AND p.status = 'ACTIVE' AND p.permission_code = #{permissionCode}
+            )
+            """)
+    boolean roleHasActivePermission(@Param("roleId") long roleId,
+                                    @Param("permissionCode") String permissionCode);
+
     /** 查询用户当前拥有的平台角色，用于用户列表和详情展示。 */
     @Select("""
             SELECT r.* FROM sys_role r
