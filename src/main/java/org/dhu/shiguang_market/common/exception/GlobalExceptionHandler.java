@@ -21,6 +21,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -48,6 +49,12 @@ public class GlobalExceptionHandler {
     ResponseEntity<ApiErrorResponse> badRequest(Exception ex) {
         return ResponseEntity.badRequest()
                 .body(ApiErrorResponse.of("BAD_REQUEST", "请求参数格式错误", null));
+    }
+
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    ResponseEntity<ApiErrorResponse> uploadTooLarge(MaxUploadSizeExceededException ex) {
+        return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE)
+                .body(ApiErrorResponse.of("UPLOAD_FILE_TOO_LARGE", "上传文件或请求体超过大小限制", null));
     }
 
     @ExceptionHandler(NotLoginException.class)

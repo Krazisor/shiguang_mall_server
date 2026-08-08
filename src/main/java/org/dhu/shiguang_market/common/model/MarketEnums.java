@@ -70,4 +70,44 @@ public final class MarketEnums {
     }
 
     public enum RefundStatus implements StringCodeEnum { NOT_STARTED, PROCESSING, SUCCESS, FAILED }
+
+    public enum AssetPurpose implements StringCodeEnum {
+        AVATAR, SHOP_LOGO, BRAND_LOGO, PRODUCT_COVER, PRODUCT_GALLERY,
+        SKU_IMAGE, RICH_TEXT_IMAGE, AFTER_SALE_EVIDENCE, APPEAL_EVIDENCE
+    }
+
+    public enum AssetStatus implements StringCodeEnum { ACTIVE, DELETED }
+
+    public enum AfterSaleAppealTriggerType implements StringCodeEnum {
+        MERCHANT_REJECTED, MERCHANT_TIMEOUT
+    }
+
+    public enum AfterSaleAppealStatus implements StringCodeEnum { PENDING, APPROVED, REJECTED }
+
+    public enum AfterSaleAppealDecision implements StringCodeEnum { APPROVE, REJECT }
+
+    public enum MerchantNotificationType implements StringCodeEnum {
+        AFTER_SALE_APPEAL_SUBMITTED, AFTER_SALE_APPEAL_DECIDED
+    }
+
+    public enum MerchantWalletStatus implements StringCodeEnum { ACTIVE, FROZEN, CLOSED }
+
+    public enum MerchantWalletTransactionType implements StringCodeEnum {
+        ORDER_PENDING_CREDIT, SETTLEMENT_RELEASE, COMMISSION_DEBIT, REFUND_DEBIT,
+        WITHDRAW_FREEZE, WITHDRAW_SUCCESS, WITHDRAW_FAILED, WITHDRAW_REJECT, PLATFORM_ADJUST
+    }
+
+    public enum MerchantTransactionDirection implements StringCodeEnum { CREDIT, DEBIT, TRANSFER }
+
+    public enum MerchantWalletBucket implements StringCodeEnum { PENDING, AVAILABLE, FROZEN }
+
+    public enum SettlementStatus implements StringCodeEnum {
+        PENDING, READY, SETTLED, REFUNDED, RECOVERY_REQUIRED
+    }
+
+    public enum MerchantWithdrawalStatus implements StringCodeEnum {
+        PROCESSING, SUCCESS, FAILED, REJECTED
+    }
+
+    public enum WithdrawalDestinationType implements StringCodeEnum { VIRTUAL_ACCOUNT }
 }

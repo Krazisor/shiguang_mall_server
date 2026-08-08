@@ -3,12 +3,16 @@ server:
 
 spring:
   config:
-    import: optional:file:.env.properties
+    import: optional:file:.env[.properties],optional:file:.env.properties
   application:
     name: shiguang_market
   jackson:
     deserialization:
       fail-on-unknown-properties: true
+  servlet:
+    multipart:
+      max-file-size: ${UPLOAD_MAX_FILE_SIZE:10MB}
+      max-request-size: ${UPLOAD_MAX_REQUEST_SIZE:12MB}
   datasource:
     driver-class-name: com.mysql.cj.jdbc.Driver
     url: ${DB_URL}
@@ -60,3 +64,14 @@ market:
     ttl-hours: ${IDEMPOTENCY_TTL_HOURS:24}
   content:
     allow-local-http: ${CONTENT_ALLOW_LOCAL_HTTP:false}
+  storage:
+    enabled: ${MINIO_ENABLED:false}
+    endpoint: ${MINIO_ENDPOINT:http://127.0.0.1:9000}
+    access-key: ${MINIO_ACCESS_KEY:}
+    secret-key: ${MINIO_SECRET_KEY:}
+    bucket: ${MINIO_BUCKET:shiguang-market}
+    public-base-url: ${MINIO_PUBLIC_BASE_URL:http://127.0.0.1:9000}
+    object-prefix: ${MINIO_OBJECT_PREFIX:assets}
+    auto-create-bucket: ${MINIO_AUTO_CREATE_BUCKET:true}
+    public-read: ${MINIO_PUBLIC_READ:true}
+    max-file-size-bytes: ${MINIO_MAX_FILE_SIZE_BYTES:10485760}

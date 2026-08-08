@@ -39,4 +39,12 @@ public class BusinessException extends RuntimeException {
     public static BusinessException unprocessable(String code, String message) {
         return new BusinessException(HttpStatus.UNPROCESSABLE_ENTITY, code, message);
     }
+
+    public static BusinessException payloadTooLarge(String code, String message) {
+        return new BusinessException(HttpStatus.PAYLOAD_TOO_LARGE, code, message);
+    }
+
+    public static BusinessException unavailable(String code, String message) {
+        return new BusinessException(HttpStatus.SERVICE_UNAVAILABLE, code, message);
+    }
 }
