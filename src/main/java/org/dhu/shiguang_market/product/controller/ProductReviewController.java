@@ -5,6 +5,7 @@ import org.dhu.shiguang_market.common.api.ApiResponse;
 import org.dhu.shiguang_market.common.api.PageView;
 import org.dhu.shiguang_market.product.dto.ShopProductDtos.ProductReviewDetailView;
 import org.dhu.shiguang_market.product.dto.ShopProductDtos.ProductReviewSummaryView;
+import org.dhu.shiguang_market.product.dto.ShopProductDtos.ProductStatusHistoryView;
 import org.dhu.shiguang_market.product.dto.ShopProductDtos.ReviewDecisionRequest;
 import org.dhu.shiguang_market.product.service.ProductReviewService;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -37,6 +38,17 @@ public class ProductReviewController {
     @GetMapping("/{spuId}")
     public ApiResponse<ProductReviewDetailView> detail(@PathVariable long spuId) {
         return ApiResponse.success(service.detail(spuId));
+    }
+
+    /**
+     * 分页查询商品状态历史，供平台查看审核及治理操作记录。
+     */
+    @GetMapping("/{spuId}/history")
+    public ApiResponse<PageView<ProductStatusHistoryView>> history(
+            @PathVariable long spuId,
+            @RequestParam(defaultValue = "1") long page,
+            @RequestParam(defaultValue = "20") long pageSize) {
+        return ApiResponse.success(service.history(spuId, page, pageSize));
     }
 
     @PostMapping("/{spuId}/approve")
