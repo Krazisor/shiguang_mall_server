@@ -54,6 +54,16 @@ CREATE TABLE IF NOT EXISTS merchant_wallet_account (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
   COMMENT='Shop-owned merchant wallet aggregate; independent from buyer wallet';
 
+-- Backfill the one wallet row that every existing shop must have. The unique
+-- shop key makes this safe to run repeatedly during deployment.
+INSERT INTO merchant_wallet_account
+    (shop_id, currency, pending_balance, available_balance, frozen_balance,
+     lifetime_gross_income, lifetime_commission, lifetime_refund, status, version)
+SELECT s.id, 'CNY', 0.00, 0.00, 0.00, 0.00, 0.00, 0.00, 'ACTIVE', 0
+FROM shop s
+LEFT JOIN merchant_wallet_account w ON w.shop_id = s.id
+WHERE w.id IS NULL;
+
 -- ============================================================
 -- 2. Per-shop order settlement snapshot
 -- ============================================================

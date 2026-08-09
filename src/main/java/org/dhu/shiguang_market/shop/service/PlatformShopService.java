@@ -20,6 +20,7 @@ import org.dhu.shiguang_market.identity.mapper.SysUserMapper;
 import org.dhu.shiguang_market.identity.model.SysRole;
 import org.dhu.shiguang_market.identity.model.SysUser;
 import org.dhu.shiguang_market.identity.service.IdentityViewMapper;
+import org.dhu.shiguang_market.integration.merchantwallet.MerchantWalletProvisionPort;
 import org.dhu.shiguang_market.integration.order.ActiveShopBusinessPort;
 import org.dhu.shiguang_market.shop.dto.PlatformDtos.ChangeShopStatusRequest;
 import org.dhu.shiguang_market.shop.dto.PlatformDtos.CreateShopRequest;
@@ -31,6 +32,7 @@ import org.dhu.shiguang_market.shop.model.Shop;
 import org.dhu.shiguang_market.shop.model.ShopUser;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.beans.factory.annotation.Autowired;
 
 @Service
 public class PlatformShopService {
@@ -47,12 +49,14 @@ public class PlatformShopService {
     private final CurrentUserService currentUser;
     private final NumberGenerator numbers;
     private final ContentSafety contentSafety;
+    private final MerchantWalletProvisionPort merchantWalletProvision;
 
+    @Autowired
     public PlatformShopService(ShopMapper shopMapper, ShopUserMapper shopUserMapper,
                                SysUserMapper userMapper, SysRoleMapper roleMapper,
                                ActiveShopBusinessPort activeShopBusiness,
                                CurrentUserService currentUser, NumberGenerator numbers,
-                               ContentSafety contentSafety) {
+                               ContentSafety contentSafety, MerchantWalletProvisionPort merchantWalletProvision) {
         this.shopMapper = shopMapper;
         this.shopUserMapper = shopUserMapper;
         this.userMapper = userMapper;
@@ -61,6 +65,17 @@ public class PlatformShopService {
         this.currentUser = currentUser;
         this.numbers = numbers;
         this.contentSafety = contentSafety;
+        this.merchantWalletProvision = merchantWalletProvision;
+    }
+
+    /** Kept for focused tests and older callers; the Spring-managed constructor supplies the mapper. */
+    public PlatformShopService(ShopMapper shopMapper, ShopUserMapper shopUserMapper,
+                               SysUserMapper userMapper, SysRoleMapper roleMapper,
+                               ActiveShopBusinessPort activeShopBusiness,
+                               CurrentUserService currentUser, NumberGenerator numbers,
+                               ContentSafety contentSafety) {
+        this(shopMapper, shopUserMapper, userMapper, roleMapper, activeShopBusiness,
+                currentUser, numbers, contentSafety, null);
     }
 
     public PageView<PlatformShopView> list(ShopStatus status, String keyword,
@@ -105,6 +120,9 @@ public class PlatformShopService {
         member.setRoleScope(ScopeType.SHOP);
         member.setStatus(ActiveStatus.ACTIVE);
         shopUserMapper.insert(member);
+        if (merchantWalletProvision != null) {
+            merchantWalletProvision.provision(shop.getId());
+        }
         return view(shopMapper.selectById(shop.getId()));
     }
 

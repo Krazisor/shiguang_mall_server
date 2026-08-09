@@ -80,9 +80,10 @@ public class MerchantWalletService {
         this.shopAccess = shopAccess; this.idempotency = idempotency; this.numbers = numbers; this.userMapper = userMapper;
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public MerchantWalletView wallet(long shopId) {
         shopAccess.require(shopId, "shop:wallet:read");
+        walletMapper.ensureByShopId(shopId);
         MerchantWalletAccount wallet = walletMapper.selectOne(new LambdaQueryWrapper<MerchantWalletAccount>().eq(MerchantWalletAccount::getShopId, shopId));
         if (wallet == null) throw BusinessException.notFound("RESOURCE_NOT_FOUND", "钱包不存在");
         return walletView(wallet);
@@ -182,6 +183,7 @@ public class MerchantWalletService {
             throw BusinessException.unprocessable("WITHDRAWAL_DESTINATION_INVALID", "仅支持虚拟账户");
         }
         String destination = requireText(request.destinationAccount(), 128);
+        walletMapper.ensureByShopId(shopId);
         MerchantWalletAccount wallet = walletMapper.selectByShopIdForUpdate(shopId);
         if (wallet == null) throw BusinessException.notFound("RESOURCE_NOT_FOUND", "钱包不存在");
         if (wallet.getStatus() != MerchantWalletStatus.ACTIVE) throw BusinessException.conflict("MERCHANT_WALLET_FROZEN", "钱包不可用");
