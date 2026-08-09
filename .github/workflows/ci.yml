@@ -1,12 +1,9 @@
 name: Build and test
 
 on:
-  pull_request:
-    branches:
-      - main
-  push:
-    branches:
-      - main
+  # Keep the workflow available for an occasional manual verification, but
+  # do not run Maven/Docker packaging on pushes or pull requests.
+  workflow_dispatch:
 
 permissions:
   contents: read
