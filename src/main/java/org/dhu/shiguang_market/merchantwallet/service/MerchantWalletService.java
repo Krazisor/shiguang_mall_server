@@ -131,13 +131,15 @@ public class MerchantWalletService {
                                                                  String businessNo, LocalDateTime createdFrom,
                                                                  LocalDateTime createdTo, long page, long pageSize) {
         shopAccess.require(shopId, "shop:wallet:read"); validatePage(page, pageSize);
+        String normalizedBusinessType = Formatters.trimToNull(businessType);
+        String normalizedBusinessNo = Formatters.trimToNull(businessNo);
         Page<MerchantWalletTransaction> result = transactionMapper.selectPage(Page.of(page, pageSize),
                 new LambdaQueryWrapper<MerchantWalletTransaction>().eq(MerchantWalletTransaction::getShopId, shopId)
                         .eq(type != null, MerchantWalletTransaction::getTransactionType, type)
                         .and(bucket != null, q -> q.eq(MerchantWalletTransaction::getTargetBucket, bucket)
                                 .or().eq(MerchantWalletTransaction::getSourceBucket, bucket))
-                        .eq(businessType != null && !businessType.isBlank(), MerchantWalletTransaction::getBusinessType, businessType.trim())
-                        .eq(businessNo != null && !businessNo.isBlank(), MerchantWalletTransaction::getBusinessNo, businessNo.trim())
+                        .eq(normalizedBusinessType != null, MerchantWalletTransaction::getBusinessType, normalizedBusinessType)
+                        .eq(normalizedBusinessNo != null, MerchantWalletTransaction::getBusinessNo, normalizedBusinessNo)
                         .ge(createdFrom != null, MerchantWalletTransaction::getCreatedAt, createdFrom)
                         .lt(createdTo != null, MerchantWalletTransaction::getCreatedAt, createdTo)
                         .orderByDesc(MerchantWalletTransaction::getCreatedAt).orderByDesc(MerchantWalletTransaction::getId));
