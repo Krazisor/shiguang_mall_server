@@ -17,6 +17,7 @@ import org.dhu.shiguang_market.identity.mapper.SysUserMapper;
 import org.dhu.shiguang_market.identity.model.SysRole;
 import org.dhu.shiguang_market.identity.model.SysUser;
 import org.dhu.shiguang_market.shop.controller.ShopMemberController;
+import org.dhu.shiguang_market.shop.controller.PlatformShopController;
 import org.dhu.shiguang_market.shop.dto.ShopMemberDtos.AddShopMemberRequest;
 import org.dhu.shiguang_market.shop.dto.ShopMemberDtos.ChangeShopMemberRoleRequest;
 import org.dhu.shiguang_market.shop.dto.ShopMemberDtos.StatusRequest;
@@ -42,6 +43,7 @@ import org.springframework.transaction.annotation.Transactional;
 @Transactional
 class ShopMemberIntegrationTests {
     @Autowired private ShopMemberController controller;
+    @Autowired private PlatformShopController platformController;
     @Autowired private ShopMapper shopMapper;
     @Autowired private ShopUserMapper shopUserMapper;
     @Autowired private SysUserMapper userMapper;
@@ -126,6 +128,37 @@ class ShopMemberIntegrationTests {
                 .isInstanceOfSatisfying(BusinessException.class,
                         exception -> assertThat(exception.getCode())
                                 .isEqualTo("CANNOT_DISABLE_SELF_WITHOUT_OTHER_ADMIN"));
+    }
+
+    @Test
+    void platformCrudManagesMemberWithoutShopMembership() {
+        SysUser platformCaller = insertUser("platform_caller");
+        when(currentUser.id()).thenReturn(platformCaller.getId());
+        SysUser target = insertUser("platform_target");
+        SysRole productRole = shopRole("SHOP_PRODUCT_OPERATOR");
+
+        when(currentUser.id()).thenReturn(platformCaller.getId());
+        var created = platformController.addMember(shop.getId(),
+                new AddShopMemberRequest(target.getUsername(), productRole.getId().toString()))
+                .getBody().data();
+        assertThat(created.user().username()).isEqualTo(target.getUsername());
+
+        var listed = platformController.members(shop.getId(), target.getUsername(), null,
+                ActiveStatus.ACTIVE, 1, 20).data();
+        assertThat(listed.items()).hasSize(1);
+
+        SysRole orderRole = shopRole("SHOP_ORDER_OPERATOR");
+        var changedRole = platformController.changeMemberRole(shop.getId(), target.getId(),
+                new ChangeShopMemberRoleRequest(orderRole.getId().toString())).data();
+        assertThat(changedRole.role().roleCode()).isEqualTo("SHOP_ORDER_OPERATOR");
+
+        var disabled = platformController.changeMemberStatus(shop.getId(), target.getId(),
+                new StatusRequest(ActiveStatus.DISABLED)).data();
+        assertThat(disabled.status()).isEqualTo(ActiveStatus.DISABLED);
+
+        platformController.removeMember(shop.getId(), target.getId());
+        assertThat(shopUserMapper.selectMemberForUpdate(shop.getId(), target.getId())).isNull();
+        assertThat(userMapper.selectById(target.getId())).isNotNull();
     }
 
     private Shop insertShop() {

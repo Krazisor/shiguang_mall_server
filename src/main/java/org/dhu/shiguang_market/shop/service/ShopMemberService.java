@@ -24,6 +24,7 @@ import org.dhu.shiguang_market.shop.dto.ShopMemberDtos.ChangeShopMemberRoleReque
 import org.dhu.shiguang_market.shop.dto.ShopMemberDtos.ShopMemberView;
 import org.dhu.shiguang_market.shop.dto.ShopMemberDtos.StatusRequest;
 import org.dhu.shiguang_market.shop.mapper.ShopUserMapper;
+import org.dhu.shiguang_market.shop.mapper.ShopMapper;
 import org.dhu.shiguang_market.shop.model.ShopUser;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
@@ -33,16 +34,19 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class ShopMemberService {
     private static final String MANAGE_PERMISSION = "shop:member:manage";
+    private static final String PLATFORM_MANAGE_PERMISSION = "platform:shop:member:manage";
     private final ShopUserMapper shopUserMapper;
+    private final ShopMapper shopMapper;
     private final SysUserMapper userMapper;
     private final SysRoleMapper roleMapper;
     private final ShopAccessService shopAccess;
     private final CurrentUserService currentUser;
 
-    public ShopMemberService(ShopUserMapper shopUserMapper, SysUserMapper userMapper,
+    public ShopMemberService(ShopUserMapper shopUserMapper, ShopMapper shopMapper, SysUserMapper userMapper,
                              SysRoleMapper roleMapper, ShopAccessService shopAccess,
                              CurrentUserService currentUser) {
         this.shopUserMapper = shopUserMapper;
+        this.shopMapper = shopMapper;
         this.userMapper = userMapper;
         this.roleMapper = roleMapper;
         this.shopAccess = shopAccess;
@@ -60,10 +64,27 @@ public class ShopMemberService {
         return PageView.of(result, result.getRecords().stream().map(this::view).toList());
     }
 
+    @Transactional(readOnly = true)
+    public PageView<ShopMemberView> listForPlatform(long shopId, String keyword, Long roleId,
+                                                    ActiveStatus status, long page, long pageSize) {
+        requirePlatformAccess(shopId);
+        return listMembers(shopId, keyword, roleId, status, page, pageSize);
+    }
+
     /** 按精确用户名新增 ACTIVE 用户，并分配一个有效的 SHOP 角色。 */
     @Transactional
     public ShopMemberView add(long shopId, AddShopMemberRequest request) {
         shopAccess.require(shopId, MANAGE_PERMISSION);
+        return addMember(shopId, request);
+    }
+
+    @Transactional
+    public ShopMemberView addForPlatform(long shopId, AddShopMemberRequest request) {
+        requirePlatformAccess(shopId);
+        return addMember(shopId, request);
+    }
+
+    private ShopMemberView addMember(long shopId, AddShopMemberRequest request) {
         if (request == null || Formatters.trimToNull(request.username()) == null) {
             throw BusinessException.badRequest("VALIDATION_FAILED", "username 不能为空");
         }
@@ -98,6 +119,18 @@ public class ShopMemberService {
     @Transactional
     public ShopMemberView changeRole(long shopId, long userId, ChangeShopMemberRoleRequest request) {
         shopAccess.require(shopId, MANAGE_PERMISSION);
+        return changeRoleMember(shopId, userId, request);
+    }
+
+    @Transactional
+    public ShopMemberView changeRoleForPlatform(long shopId, long userId,
+                                                ChangeShopMemberRoleRequest request) {
+        requirePlatformAccess(shopId);
+        return changeRoleMember(shopId, userId, request);
+    }
+
+    private ShopMemberView changeRoleMember(long shopId, long userId,
+                                            ChangeShopMemberRoleRequest request) {
         long roleId = parseId(request == null ? null : request.roleId(), "角色");
         SysRole newRole = requireShopRole(roleId);
         ShopUser member = requireMember(shopId, userId);
@@ -117,6 +150,17 @@ public class ShopMemberService {
     @Transactional
     public ShopMemberView changeStatus(long shopId, long userId, StatusRequest request) {
         shopAccess.require(shopId, MANAGE_PERMISSION);
+        return changeStatusMember(shopId, userId, request, true);
+    }
+
+    @Transactional
+    public ShopMemberView changeStatusForPlatform(long shopId, long userId, StatusRequest request) {
+        requirePlatformAccess(shopId);
+        return changeStatusMember(shopId, userId, request, false);
+    }
+
+    private ShopMemberView changeStatusMember(long shopId, long userId, StatusRequest request,
+                                              boolean protectSelf) {
         if (request == null || request.targetStatus() == null) {
             throw BusinessException.badRequest("VALIDATION_FAILED", "targetStatus 不能为空");
         }
@@ -128,12 +172,40 @@ public class ShopMemberService {
                 throw BusinessException.conflict("STATE_CONFLICT", "非 ACTIVE 用户不能启用店铺成员身份");
             }
         } else if (roleMapper.roleHasActivePermission(member.getRoleId(), MANAGE_PERMISSION)) {
-            String code = currentUser.id() == userId
+            String code = protectSelf && currentUser.id() == userId
                     ? "CANNOT_DISABLE_SELF_WITHOUT_OTHER_ADMIN" : "LAST_SHOP_ADMIN_REQUIRED";
             protectLastManager(shopId, userId, code);
         }
         shopUserMapper.updateMemberStatus(shopId, userId, request.targetStatus());
         return view(requireMember(shopId, userId));
+    }
+
+    @Transactional
+    public void removeForPlatform(long shopId, long userId) {
+        requirePlatformAccess(shopId);
+        ShopUser member = requireMember(shopId, userId);
+        if (member.getStatus() == ActiveStatus.ACTIVE
+                && roleMapper.roleHasActivePermission(member.getRoleId(), MANAGE_PERMISSION)) {
+            protectLastManager(shopId, userId, "LAST_SHOP_ADMIN_REQUIRED");
+        }
+        if (shopUserMapper.deleteMember(shopId, userId) != 1) {
+            throw BusinessException.notFound("SHOP_MEMBER_NOT_FOUND", "店铺成员不存在");
+        }
+    }
+
+    private PageView<ShopMemberView> listMembers(long shopId, String keyword, Long roleId,
+                                                 ActiveStatus status, long page, long pageSize) {
+        checkPage(page, pageSize);
+        Page<ShopUser> result = shopUserMapper.selectMemberPage(
+                Page.of(page, pageSize), shopId, Formatters.trimToNull(keyword), roleId, status);
+        return PageView.of(result, result.getRecords().stream().map(this::view).toList());
+    }
+
+    private void requirePlatformAccess(long shopId) {
+        currentUser.requirePermission(PLATFORM_MANAGE_PERMISSION);
+        if (shopMapper.selectById(shopId) == null) {
+            throw BusinessException.notFound("SHOP_NOT_FOUND", "店铺不存在");
+        }
     }
 
     private SysRole requireShopRole(long roleId) {

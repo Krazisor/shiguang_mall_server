@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import java.util.List;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
+import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Update;
 import org.dhu.shiguang_market.common.model.MarketEnums.ActiveStatus;
 import org.dhu.shiguang_market.shop.model.ShopUser;
@@ -64,6 +65,10 @@ public interface ShopUserMapper extends BaseMapper<ShopUser> {
             """)
     int updateMemberStatus(@Param("shopId") long shopId, @Param("userId") long userId,
                            @Param("status") ActiveStatus status);
+
+    /** 按店铺和用户复合主键移除成员关系，不删除平台用户账号。 */
+    @Delete("DELETE FROM shop_user WHERE shop_id = #{shopId} AND user_id = #{userId}")
+    int deleteMember(@Param("shopId") long shopId, @Param("userId") long userId);
 
     /** 统计除目标用户外仍拥有成员管理权限的 ACTIVE 成员。 */
     @Select("""
