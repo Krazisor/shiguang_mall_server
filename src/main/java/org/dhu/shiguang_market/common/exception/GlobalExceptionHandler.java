@@ -29,12 +29,18 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(BusinessException.class)
     ResponseEntity<ApiErrorResponse> business(BusinessException ex) {
+        if (ex.getStatus().is5xxServerError()) {
+            log.error("Business failure status={} code={}", ex.getStatus().value(), ex.getCode(), ex);
+        } else {
+            log.warn("Business rejection status={} code={}", ex.getStatus().value(), ex.getCode());
+        }
         return ResponseEntity.status(ex.getStatus())
                 .body(ApiErrorResponse.of(ex.getCode(), ex.getMessage(), null));
     }
 
     @ExceptionHandler({MethodArgumentNotValidException.class, BindException.class})
     ResponseEntity<ApiErrorResponse> validation(Exception ex) {
+        log.warn("Request validation failed");
         var binding = ex instanceof MethodArgumentNotValidException manv
                 ? manv.getBindingResult() : ((BindException) ex).getBindingResult();
         List<FieldErrorDetail> details = binding.getFieldErrors().stream()
@@ -59,6 +65,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(NotLoginException.class)
     ResponseEntity<ApiErrorResponse> notLogin(NotLoginException ex) {
+        log.warn("Authentication failed scene={}", ex.getType());
         String code = switch (ex.getType()) {
             case NotLoginException.TOKEN_TIMEOUT -> "AUTH_TOKEN_EXPIRED";
             case NotLoginException.BE_REPLACED -> "AUTH_TOKEN_REPLACED";
@@ -71,12 +78,14 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler({NotPermissionException.class, NotRoleException.class})
     ResponseEntity<ApiErrorResponse> denied(RuntimeException ex) {
+        log.warn("Authorization denied exception={}", ex.getClass().getSimpleName());
         return ResponseEntity.status(HttpStatus.FORBIDDEN)
                 .body(ApiErrorResponse.of("AUTH_PERMISSION_DENIED", "权限不足", null));
     }
 
     @ExceptionHandler(DataIntegrityViolationException.class)
     ResponseEntity<ApiErrorResponse> conflict(DataIntegrityViolationException ex) {
+        log.warn("Data integrity conflict requestId={}", org.dhu.shiguang_market.common.util.RequestContext.requestId());
         return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(ApiErrorResponse.of("RESOURCE_CONFLICT", "资源关系或唯一字段冲突", null));
     }

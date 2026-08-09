@@ -36,9 +36,12 @@ import org.dhu.shiguang_market.shop.model.ShopUser;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @Service
 public class IdentityService {
+    private static final Logger log = LoggerFactory.getLogger(IdentityService.class);
     private static final Pattern EMAIL = Pattern.compile(
             "^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$");
     private final SysUserMapper userMapper;
@@ -100,6 +103,7 @@ public class IdentityService {
 
         // 通过 B 线端口创建钱包，避免身份模块直接操作 wallet_account 表。
         walletProvision.provision(user.getId());
+        log.info("Registered user userId={}", user.getId());
         return user(user);
     }
 
@@ -107,6 +111,7 @@ public class IdentityService {
         SysUser user = userMapper.selectOne(new LambdaQueryWrapper<SysUser>()
                 .eq(SysUser::getUsername, request.username().trim()));
         if (user == null || !passwordService.matches(request.password(), user.getPasswordHash())) {
+            log.warn("User login failed due to invalid credentials");
             throw new BusinessException(org.springframework.http.HttpStatus.UNAUTHORIZED,
                     "AUTH_INVALID_CREDENTIALS", "用户名或密码错误");
         }
@@ -119,13 +124,15 @@ public class IdentityService {
         user.setLastLoginAt(LocalDateTime.now());
         userMapper.updateById(user);
         StpUtil.login(user.getId());
+        log.info("User login succeeded userId={}", user.getId());
         return new LoginView(StpUtil.getTokenName(), StpUtil.getTokenValue(), StpUtil.getTokenTimeout(),
                 StpUtil.getTokenActiveTimeout(), user(user));
     }
 
     public void logout() {
-        currentUser.id();
+        long userId = currentUser.id();
         StpUtil.logout();
+        log.info("User logout succeeded userId={}", userId);
     }
 
     public CurrentUserView me() {

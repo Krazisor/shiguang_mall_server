@@ -9,9 +9,12 @@ import org.dhu.shiguang_market.shop.mapper.ShopUserMapper;
 import org.dhu.shiguang_market.shop.model.Shop;
 import org.dhu.shiguang_market.shop.model.ShopUser;
 import org.springframework.stereotype.Service;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @Service
 public class ShopAccessService {
+    private static final Logger log = LoggerFactory.getLogger(ShopAccessService.class);
     private final CurrentUserService currentUser;
     private final ShopMapper shopMapper;
     private final ShopUserMapper shopUserMapper;
@@ -32,6 +35,8 @@ public class ShopAccessService {
                 .eq(ShopUser::getStatus, ActiveStatus.ACTIVE));
         List<String> permissions = shopUserMapper.selectPermissions(shopId, userId);
         if (shop == null || member == null || !permissions.contains(permission)) {
+            log.warn("Shop access denied shopId={} userId={} permission={} shopExists={} memberActive={} permissionGranted={}",
+                    shopId, userId, permission, shop != null, member != null, permissions.contains(permission));
             throw BusinessException.notFound("RESOURCE_NOT_FOUND", "资源不存在");
         }
         return shop;

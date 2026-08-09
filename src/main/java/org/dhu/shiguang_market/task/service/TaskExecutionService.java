@@ -291,6 +291,7 @@ public class TaskExecutionService {
     }
 
     private TaskRunView run(String taskName, boolean dryRun, Supplier<TaskCounts> action) {
+        log.info("Task started taskName={} dryRun={}", taskName, dryRun);
         String token = UUID.randomUUID().toString();
         if (!locks.tryLock(taskName, token)) {
             throw BusinessException.conflict("TASK_ALREADY_RUNNING", "任务正在执行中");
@@ -308,12 +309,16 @@ public class TaskExecutionService {
         OffsetDateTime startedAt = RequestContext.now();
         try {
             TaskCounts counts = action.get();
+            log.info("Task completed taskName={} scanned={} processed={} succeeded={} failed={} mismatches={}",
+                    taskName, counts.scanned(), counts.processed(), counts.succeeded(),
+                    counts.failed(), counts.mismatches());
             return new TaskRunView(taskName, dryRun, counts.scanned(), counts.processed(),
                     counts.succeeded(), counts.failed(), counts.mismatches(), startedAt,
                     RequestContext.now(), RequestContext.requestId());
         } finally {
             // 非事务调用（例如普通单元测试）仍在方法退出时及时释放。
             if (!unlockAfterTransaction) locks.unlock(taskName, token);
+            log.debug("Task lock released taskName={}", taskName);
         }
     }
 

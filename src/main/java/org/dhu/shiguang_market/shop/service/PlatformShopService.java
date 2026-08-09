@@ -33,9 +33,12 @@ import org.dhu.shiguang_market.shop.model.ShopUser;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 @Service
 public class PlatformShopService {
+    private static final Logger log = LoggerFactory.getLogger(PlatformShopService.class);
     private static final Map<ShopStatus, Set<ShopStatus>> TRANSITIONS = Map.of(
             ShopStatus.PENDING, Set.of(ShopStatus.ACTIVE, ShopStatus.CLOSED),
             ShopStatus.ACTIVE, Set.of(ShopStatus.SUSPENDED, ShopStatus.CLOSED),
@@ -123,6 +126,7 @@ public class PlatformShopService {
         if (merchantWalletProvision != null) {
             merchantWalletProvision.provision(shop.getId());
         }
+        log.info("Created shop shopId={} shopNo={}", shop.getId(), shop.getShopNo());
         return view(shopMapper.selectById(shop.getId()));
     }
 
@@ -139,6 +143,7 @@ public class PlatformShopService {
         if (shop == null) throw BusinessException.notFound("SHOP_NOT_FOUND", "店铺不存在");
         apply(shop, request.shopName(), request.logoUrl(), request.description(), request.contactName(), request.contactPhone());
         shopMapper.updateById(shop);
+        log.info("Updated shop shopId={}", shopId);
         return view(shopMapper.selectById(shopId));
     }
 
@@ -157,6 +162,7 @@ public class PlatformShopService {
         }
         shop.setStatus(request.targetStatus());
         shopMapper.updateById(shop);
+        log.info("Changed shop status shopId={} status={}", shopId, request.targetStatus());
         return view(shopMapper.selectById(shopId));
     }
 

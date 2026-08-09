@@ -34,6 +34,24 @@ spring:
       connect-timeout: 5s
       timeout: 5s
 
+logging:
+  file:
+    name: ${LOG_FILE:logs/shiguang-market.log}
+  level:
+    root: ${LOG_LEVEL_ROOT:INFO}
+    org.dhu.shiguang_market: ${LOG_LEVEL_APP:INFO}
+    org.springframework.web: ${LOG_LEVEL_SPRING_WEB:WARN}
+    com.baomidou.mybatisplus: ${LOG_LEVEL_MYBATIS:WARN}
+  pattern:
+    console: "%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} %-5level [%thread] [requestId=%X{requestId} userId=%X{userId}] %logger{36} - %msg%n"
+    file: "%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} %-5level [%thread] [requestId=%X{requestId} userId=%X{userId}] %logger{36} - %msg%n"
+  logback:
+    rollingpolicy:
+      max-file-size: ${LOG_MAX_FILE_SIZE:50MB}
+      max-history: ${LOG_MAX_HISTORY:30}
+      total-size-cap: ${LOG_TOTAL_SIZE_CAP:1GB}
+      clean-history-on-start: true
+
 mybatis-plus:
   mapper-locations: classpath*:/mapper/**/*.xml
   configuration:

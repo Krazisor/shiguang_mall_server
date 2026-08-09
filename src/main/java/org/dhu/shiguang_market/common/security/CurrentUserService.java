@@ -6,9 +6,13 @@ import org.dhu.shiguang_market.common.model.MarketEnums.UserStatus;
 import org.dhu.shiguang_market.identity.mapper.SysUserMapper;
 import org.dhu.shiguang_market.identity.model.SysUser;
 import org.springframework.stereotype.Service;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 
 @Service
 public class CurrentUserService {
+    private static final Logger log = LoggerFactory.getLogger(CurrentUserService.class);
     private final SysUserMapper userMapper;
 
     public CurrentUserService(SysUserMapper userMapper) {
@@ -18,6 +22,7 @@ public class CurrentUserService {
     public long id() {
         StpUtil.checkLogin();
         long id = StpUtil.getLoginIdAsLong();
+        MDC.put("userId", Long.toString(id));
         SysUser user = userMapper.selectById(id);
         if (user == null) {
             StpUtil.logout();
@@ -38,6 +43,7 @@ public class CurrentUserService {
 
     public void requirePermission(String permission) {
         id();
+        log.debug("Checking permission permission={}", permission);
         StpUtil.checkPermission(permission);
     }
 }
