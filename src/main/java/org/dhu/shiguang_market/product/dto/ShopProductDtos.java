@@ -19,6 +19,7 @@ import org.dhu.shiguang_market.common.model.MarketEnums.ProductStatus;
 import org.dhu.shiguang_market.product.dto.ProductDtos.BrandView;
 import org.dhu.shiguang_market.product.dto.ProductDtos.CategoryBrief;
 import org.dhu.shiguang_market.product.dto.ProductDtos.ProductDetailView;
+import org.dhu.shiguang_market.common.api.CommonViews.ShopSummary;
 
 public final class ShopProductDtos {
     private ShopProductDtos() {
@@ -176,6 +177,31 @@ public final class ShopProductDtos {
             List<ProductDtos.ProductAttributeDisplayView> attributes,
             List<ProductReviewSkuView> skus, ProductStatus status, int contentVersion,
             UserSummary createdBy, UserSummary updatedBy, List<ProductStatusHistoryView> history,
+            OffsetDateTime createdAt, OffsetDateTime updatedAt) {
+    }
+
+    public record PlatformProductSummaryView(
+            String id, String spuNo, String productName, String coverUrl,
+            ShopSummary shop, CategoryBrief category, BrandView brand,
+            ProductStatus status, int contentVersion, int skuCount, int enabledSkuCount,
+            int availableQuantity, int lockedQuantity,
+            OffsetDateTime createdAt, OffsetDateTime updatedAt) {
+    }
+
+    public record PlatformSkuView(
+            String id, String skuNo, String skuName, Map<String, String> spec,
+            String salePrice, String marketPrice, String barcode, String imageUrl,
+            EnabledStatus status, int version, int availableQuantity, int lockedQuantity,
+            OffsetDateTime createdAt, OffsetDateTime updatedAt) {
+    }
+
+    public record PlatformProductDetailView(
+            String id, String spuNo, String productName, String subtitle, String coverUrl,
+            List<String> galleryUrls, String detailHtml, String packingList, String serviceNote,
+            ShopSummary shop, CategoryBrief category, BrandView brand,
+            List<ProductDtos.ProductAttributeDisplayView> attributes,
+            List<PlatformSkuView> skus, ProductStatus status, int contentVersion,
+            UserSummary createdBy, UserSummary updatedBy,
             OffsetDateTime createdAt, OffsetDateTime updatedAt) {
     }
 
