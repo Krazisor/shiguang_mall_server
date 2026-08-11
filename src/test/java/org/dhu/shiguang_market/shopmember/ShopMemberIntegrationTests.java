@@ -83,6 +83,40 @@ class ShopMemberIntegrationTests {
         assertThat(result.items().getFirst().role().roleCode()).isEqualTo("SHOP_ADMIN");
     }
 
+    /** 可分配角色只包含匹配关键词的 ACTIVE 店铺角色，并按角色代码稳定排序。 */
+    @Test
+    void assignableRoleListFiltersScopeStatusAndKeyword() {
+        String marker = "角色查询" + suffix();
+        SysRole first = insertRole("SHOP_A_" + suffix(), marker, ScopeType.SHOP, ActiveStatus.ACTIVE);
+        SysRole second = insertRole("SHOP_Z_" + suffix(), marker, ScopeType.SHOP, ActiveStatus.ACTIVE);
+        insertRole("SHOP_DISABLED_" + suffix(), marker, ScopeType.SHOP, ActiveStatus.DISABLED);
+        insertRole("PLATFORM_" + suffix(), marker, ScopeType.PLATFORM, ActiveStatus.ACTIVE);
+
+        var result = controller.roles(shop.getId(), "  " + marker + "  ", 1, 20).data();
+
+        assertThat(result.items()).extracting(view -> view.roleCode())
+                .containsExactly(first.getRoleCode(), second.getRoleCode());
+        assertThat(result.items()).allSatisfy(view -> {
+            assertThat(view.scopeType()).isEqualTo(ScopeType.SHOP);
+            assertThat(view.status()).isEqualTo(ActiveStatus.ACTIVE);
+        });
+        assertThat(result.total()).isEqualTo(2);
+    }
+
+    /** 其他店铺角色即使是有效成员，也不能读取成员管理角色字典。 */
+    @Test
+    void assignableRoleListRequiresMemberManagePermission() {
+        SysUser operator = insertUser("role_reader");
+        insertMember(operator.getId(), shopRole("SHOP_PRODUCT_OPERATOR").getId());
+        when(currentUser.id()).thenReturn(operator.getId());
+
+        assertThatThrownBy(() -> controller.roles(shop.getId(), null, 1, 20))
+                .isInstanceOfSatisfying(BusinessException.class, exception -> {
+                    assertThat(exception.getStatus().value()).isEqualTo(404);
+                    assertThat(exception.getCode()).isEqualTo("RESOURCE_NOT_FOUND");
+                });
+    }
+
     /** 新增成员应按用户名找到 ACTIVE 用户，并写入一个有效的 SHOP 角色。 */
     @Test
     void addMemberFlowIsConnected() {
@@ -197,6 +231,18 @@ class ShopMemberIntegrationTests {
                 .eq(SysRole::getScopeType, ScopeType.SHOP)
                 .eq(SysRole::getStatus, ActiveStatus.ACTIVE));
         assertThat(role).as("schema.sql 应初始化 " + roleCode + " 角色").isNotNull();
+        return role;
+    }
+
+    private SysRole insertRole(String roleCode, String roleName, ScopeType scopeType,
+                               ActiveStatus status) {
+        SysRole role = new SysRole();
+        role.setRoleCode(roleCode);
+        role.setRoleName(roleName);
+        role.setScopeType(scopeType);
+        role.setDescription("店铺成员角色查询集成测试");
+        role.setStatus(status);
+        assertThat(roleMapper.insert(role)).isOne();
         return role;
     }
 

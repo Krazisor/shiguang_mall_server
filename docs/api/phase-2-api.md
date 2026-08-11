@@ -117,10 +117,13 @@
 
 | 方法 | 路径 | 请求/查询 | 成功 `data` |
 | --- | --- | --- | --- |
+| GET | `/api/shops/{shopId}/members/roles` | `keyword,page,pageSize` | `Page<RoleView>` |
 | GET | `/api/shops/{shopId}/members` | `keyword,roleId,status,page,pageSize` | `Page<ShopMemberView>` |
 | POST | `/api/shops/{shopId}/members` | `AddShopMemberRequest` | `ShopMemberView`，`201` |
 | PUT | `/api/shops/{shopId}/members/{userId}/role` | `ChangeShopMemberRoleRequest` | `ShopMemberView` |
 | POST | `/api/shops/{shopId}/members/{userId}/status` | `StatusRequest<ACTIVE|DISABLED>` | `ShopMemberView` |
+
+`GET /api/shops/{shopId}/members/roles` 查询当前店铺可分配的角色，接口固定只返回 `scopeType=SHOP` 且 `status=ACTIVE` 的角色，不接收 `scopeType` 或 `status` 参数。它仍使用 `SHOP(shop:member:manage)` 鉴权，关键词同时匹配 `roleCode` 和 `roleName`，默认分页为 `page=1,pageSize=20`，按 `roleCode ASC,id ASC` 排序。返回条目复用 `RoleView`，不返回角色权限明细。
 
 ```json
 // AddShopMemberRequest
@@ -137,7 +140,7 @@
 }
 ```
 
-`username` 必须精确匹配一个 `ACTIVE` 用户，角色必须是 `SHOP/ACTIVE`。成员变更后清理该用户店铺权限缓存。
+`username` 必须精确匹配一个 `ACTIVE` 用户，角色必须是 `SHOP/ACTIVE`。成员变更必须在下次店铺鉴权时立即生效；当前实现每次直接查询数据库，因此没有额外缓存需要清理。后续如引入店铺权限缓存，成员角色或状态变更后必须使对应缓存失效。
 
 ```json
 // ShopMemberView

@@ -4,6 +4,7 @@ import jakarta.validation.Valid;
 import org.dhu.shiguang_market.common.api.ApiResponse;
 import org.dhu.shiguang_market.common.api.PageView;
 import org.dhu.shiguang_market.common.model.MarketEnums.ActiveStatus;
+import org.dhu.shiguang_market.identity.dto.PlatformUserDtos.RoleView;
 import org.dhu.shiguang_market.shop.dto.ShopMemberDtos.AddShopMemberRequest;
 import org.dhu.shiguang_market.shop.dto.ShopMemberDtos.ChangeShopMemberRoleRequest;
 import org.dhu.shiguang_market.shop.dto.ShopMemberDtos.ShopMemberView;
@@ -40,6 +41,16 @@ public class ShopMemberController {
             @RequestParam(defaultValue = "1") long page,
             @RequestParam(defaultValue = "20") long pageSize) {
         return ApiResponse.success(service.list(shopId, keyword, roleId, status, page, pageSize));
+    }
+
+    /** 分页查询商家可分配的有效店铺角色。 */
+    @GetMapping("/roles")
+    public ApiResponse<PageView<RoleView>> roles(
+            @PathVariable long shopId,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(defaultValue = "1") long page,
+            @RequestParam(defaultValue = "20") long pageSize) {
+        return ApiResponse.success(service.roles(shopId, keyword, page, pageSize));
     }
 
     /** 新增店铺成员，成功时返回 201。 */

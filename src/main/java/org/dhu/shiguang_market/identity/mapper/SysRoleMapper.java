@@ -30,6 +30,22 @@ public interface SysRoleMapper extends BaseMapper<SysRole> {
             @Param("status") ActiveStatus status,
             @Param("keyword") String keyword);
 
+    /** 查询商家可分配的有效店铺角色，供店铺成员管理页面选择。 */
+    @Select("""
+            <script>
+            SELECT * FROM sys_role
+            WHERE scope_type = 'SHOP' AND status = 'ACTIVE'
+            <if test="keyword != null and keyword != ''">
+              AND (role_code LIKE CONCAT('%', #{keyword}, '%')
+                   OR role_name LIKE CONCAT('%', #{keyword}, '%'))
+            </if>
+            ORDER BY role_code ASC, id ASC
+            </script>
+            """)
+    Page<SysRole> selectAssignableShopRolePage(
+            Page<SysRole> page,
+            @Param("keyword") String keyword);
+
     /** 创建角色前检查角色代码是否已经存在。 */
     @Select("SELECT EXISTS(SELECT 1 FROM sys_role WHERE role_code = #{roleCode})")
     boolean existsByRoleCode(@Param("roleCode") String roleCode);

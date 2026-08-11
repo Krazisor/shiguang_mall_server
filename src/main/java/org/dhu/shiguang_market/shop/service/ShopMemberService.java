@@ -64,6 +64,16 @@ public class ShopMemberService {
         return PageView.of(result, result.getRecords().stream().map(this::view).toList());
     }
 
+    /** 查询当前商家可分配的有效店铺角色。 */
+    @Transactional(readOnly = true)
+    public PageView<RoleView> roles(long shopId, String keyword, long page, long pageSize) {
+        shopAccess.require(shopId, MANAGE_PERMISSION);
+        checkPage(page, pageSize);
+        Page<SysRole> result = roleMapper.selectAssignableShopRolePage(
+                Page.of(page, pageSize), Formatters.trimToNull(keyword));
+        return PageView.of(result, result.getRecords().stream().map(this::roleView).toList());
+    }
+
     @Transactional(readOnly = true)
     public PageView<ShopMemberView> listForPlatform(long shopId, String keyword, Long roleId,
                                                     ActiveStatus status, long page, long pageSize) {
