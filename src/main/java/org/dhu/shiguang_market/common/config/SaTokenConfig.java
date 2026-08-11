@@ -1,6 +1,7 @@
 package org.dhu.shiguang_market.common.config;
 
 import cn.dev33.satoken.interceptor.SaInterceptor;
+import cn.dev33.satoken.router.SaHttpMethod;
 import cn.dev33.satoken.router.SaRouter;
 import cn.dev33.satoken.stp.StpUtil;
 import java.util.Arrays;
@@ -22,6 +23,7 @@ public class SaTokenConfig implements WebMvcConfigurer {
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
         registry.addInterceptor(new SaInterceptor(handle -> SaRouter.match("/api/**")
+                .notMatch(SaHttpMethod.OPTIONS)
                 .notMatch(
                         "/api/auth/register", "/api/auth/login",
                         "/api/categories/tree", "/api/categories/*/attributes",
