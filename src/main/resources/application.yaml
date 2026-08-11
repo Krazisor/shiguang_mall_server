@@ -82,7 +82,7 @@ sa-token:
 market:
   internal-task-api-enabled: ${INTERNAL_TASK_API_ENABLED:false}
   cors:
-    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://localhost:3000}
+    allowed-origins: "http://localhost:5173,http://localhost:3000,${CORS_ALLOWED_ORIGINS:https://shiguangmallweb.zeabur.app}"
   trade:
     payment-timeout-minutes: ${TRADE_PAYMENT_TIMEOUT_MINUTES:30}
   idempotency:
