@@ -8,12 +8,16 @@ import org.dhu.shiguang_market.common.api.CommonViews.ShopSummary;
 import org.dhu.shiguang_market.common.api.CommonViews.UserSummary;
 import org.dhu.shiguang_market.common.model.MarketEnums.AfterSaleStatus;
 import org.dhu.shiguang_market.common.model.MarketEnums.AfterSaleType;
+import org.dhu.shiguang_market.common.model.MarketEnums.OrderDisplayStatus;
 import org.dhu.shiguang_market.common.model.MarketEnums.OrderPaymentStatus;
 import org.dhu.shiguang_market.common.model.MarketEnums.OrderStatus;
 import org.dhu.shiguang_market.common.model.MarketEnums.PaymentOrderStatus;
 import org.dhu.shiguang_market.common.model.MarketEnums.RefundStatus;
 import org.dhu.shiguang_market.common.model.MarketEnums.TradeStatus;
+import org.dhu.shiguang_market.order.dto.OrderDtos.OrderItemView;
 import org.dhu.shiguang_market.order.dto.OrderDtos.OrderItemSummaryView;
+import org.dhu.shiguang_market.order.dto.OrderDtos.OrderStatusHistoryView;
+import org.dhu.shiguang_market.order.dto.OrderDtos.ShippingView;
 
 /** 阶段五平台运营只读 DTO，字段与 API DTO 清单保持一致。 */
 public final class OperationDtos {
@@ -31,6 +35,17 @@ public final class OperationDtos {
             String refundAmount, List<OrderItemSummaryView> itemSummary, int itemKinds,
             int totalQuantity, OffsetDateTime createdAt, List<String> availableActions,
             UserSummary buyer) {
+    }
+
+    /** 平台订单只读详情，不包含收货地址、买家备注或任何可执行动作。 */
+    public record OperationOrderDetailView(
+            String id, String orderNo, String tradeId, String tradeNo,
+            ShopSummary shop, UserSummary buyer,
+            OrderStatus orderStatus, OrderDisplayStatus displayStatus, OrderPaymentStatus paymentStatus,
+            String itemAmount, String freightAmount, String payableAmount, String refundAmount,
+            OffsetDateTime createdAt, OffsetDateTime payExpireAt, OffsetDateTime paidAt,
+            OffsetDateTime completedAt, OffsetDateTime cancelledAt,
+            ShippingView shipping, List<OrderItemView> items, List<OrderStatusHistoryView> history) {
     }
 
     public record OperationPaymentView(

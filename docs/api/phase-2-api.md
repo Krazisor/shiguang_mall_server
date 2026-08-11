@@ -588,10 +588,13 @@
 | --- | --- | --- | --- |
 | GET | `/api/platform/operations/trades` | `tradeNo,userId,status,createdFrom,createdTo,page,pageSize` | `Page<OperationTradeView>` |
 | GET | `/api/platform/operations/orders` | `orderNo,shopId,userId,orderStatus,paymentStatus,page,pageSize` | `Page<OperationOrderView>` |
+| GET | `/api/platform/operations/orders/{orderId}` | 无 | `OperationOrderDetailView` |
 | GET | `/api/platform/operations/payments` | `paymentNo,tradeNo,status,page,pageSize` | `Page<OperationPaymentView>` |
 | GET | `/api/platform/operations/after-sales` | `afterSaleNo,shopId,userId,status,refundStatus,page,pageSize` | `Page<OperationAfterSaleView>` |
 | GET | `/api/platform/operations/after-sale-appeals` | `appealNo,afterSaleNo,shopId,status,page,pageSize` | `Page<OperationAfterSaleAppealView>` |
 | GET | `/api/platform/operations/business/{businessType}/{businessNo}` | 无 | `BusinessTraceView` |
+
+`OperationOrderDetailView` 返回订单、交易、店铺、脱敏买家摘要、金额、履约时间、物流、商品明细和状态历史；固定不返回收货地址、手机号、买家备注或可执行动作。完整字段和空值规则见[平台订单详情需求与接口约定](../extra/platform-order-detail-api.md)。
 
 `BusinessTraceView` 聚合返回关联交易、子订单、支付、售后、库存流水和钱包流水的只读链接摘要，不允许通过该接口执行动作。列表手机号和地址脱敏；详情仅返回排障必要字段。
 

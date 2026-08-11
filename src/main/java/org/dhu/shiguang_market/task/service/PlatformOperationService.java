@@ -39,6 +39,7 @@ import org.dhu.shiguang_market.payment.model.WalletTransaction;
 import org.dhu.shiguang_market.task.dto.OperationDtos.BusinessTraceLink;
 import org.dhu.shiguang_market.task.dto.OperationDtos.BusinessTraceView;
 import org.dhu.shiguang_market.task.dto.OperationDtos.OperationAfterSaleView;
+import org.dhu.shiguang_market.task.dto.OperationDtos.OperationOrderDetailView;
 import org.dhu.shiguang_market.task.dto.OperationDtos.OperationOrderView;
 import org.dhu.shiguang_market.task.dto.OperationDtos.OperationPaymentView;
 import org.dhu.shiguang_market.task.dto.OperationDtos.OperationTradeView;
@@ -110,6 +111,30 @@ public class PlatformOperationService {
         Page<OrderInfo> result = orderMapper.selectPage(Page.of(page, pageSize), query);
         List<OperationOrderView> items = result.getRecords().stream().map(this::orderView).toList();
         return PageView.of(result, items);
+    }
+
+    /** 查询平台订单详情，只组合运营页面需要的安全字段。 */
+    public OperationOrderDetailView orderDetail(long orderId) {
+        if (orderId < 1) {
+            throw BusinessException.badRequest("BAD_REQUEST", "订单 ID 必须为正整数");
+        }
+        OrderInfo order = orderMapper.selectById(orderId);
+        if (order == null) {
+            throw BusinessException.notFound("RESOURCE_NOT_FOUND", "订单不存在");
+        }
+        TradeOrder trade = tradeMapper.selectById(order.getTradeId());
+        var buyer = userMapper.selectById(order.getUserId());
+        if (trade == null || buyer == null) {
+            throw new IllegalStateException("Order references missing trade or buyer data");
+        }
+        return new OperationOrderDetailView(
+                id(order.getId()), order.getOrderNo(), id(order.getTradeId()), trade.getTradeNo(),
+                orderViews.shop(order), IdentityViewMapper.user(buyer),
+                order.getOrderStatus(), orderViews.displayStatus(order), order.getPaymentStatus(),
+                money(order.getItemAmount()), money(order.getFreightAmount()), money(order.getPayableAmount()),
+                money(order.getRefundAmount()), time(order.getCreatedAt()), time(trade.getPayExpireAt()),
+                time(trade.getPaidAt()), time(order.getCompletedAt()), time(order.getCancelledAt()),
+                orderViews.shipping(order), orderViews.items(order.getId()), orderViews.history(order.getId()));
     }
 
     /** 分页查询支付单；tradeNo 先精确定位主交易，避免编写复杂联表 SQL。 */

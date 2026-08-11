@@ -1,6 +1,8 @@
 package org.dhu.shiguang_market.phasefive;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
@@ -10,15 +12,26 @@ import com.baomidou.mybatisplus.core.metadata.TableInfoHelper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.util.Arrays;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 import org.dhu.shiguang_market.aftersale.mapper.AfterSaleRequestMapper;
 import org.dhu.shiguang_market.aftersale.model.AfterSaleRequest;
 import org.dhu.shiguang_market.aftersale.service.AfterSaleService;
+import org.dhu.shiguang_market.common.api.CommonViews.ShopSummary;
 import org.dhu.shiguang_market.common.exception.BusinessException;
 import org.dhu.shiguang_market.common.model.MarketEnums.InventoryTransactionType;
+import org.dhu.shiguang_market.common.model.MarketEnums.OperatorType;
+import org.dhu.shiguang_market.common.model.MarketEnums.OrderDisplayStatus;
+import org.dhu.shiguang_market.common.model.MarketEnums.OrderOperationType;
 import org.dhu.shiguang_market.common.model.MarketEnums.OrderPaymentStatus;
 import org.dhu.shiguang_market.common.model.MarketEnums.OrderStatus;
 import org.dhu.shiguang_market.common.model.MarketEnums.PaymentOrderStatus;
+import org.dhu.shiguang_market.common.model.MarketEnums.ReservationStatus;
+import org.dhu.shiguang_market.common.model.MarketEnums.ShopStatus;
 import org.dhu.shiguang_market.common.model.MarketEnums.TradeStatus;
 import org.dhu.shiguang_market.common.model.MarketEnums.TransactionDirection;
 import org.dhu.shiguang_market.common.model.MarketEnums.UserStatus;
@@ -29,6 +42,9 @@ import org.dhu.shiguang_market.inventory.mapper.InventoryTransactionMapper;
 import org.dhu.shiguang_market.inventory.model.InventoryTransaction;
 import org.dhu.shiguang_market.order.mapper.OrderInfoMapper;
 import org.dhu.shiguang_market.order.mapper.TradeOrderMapper;
+import org.dhu.shiguang_market.order.dto.OrderDtos.OrderItemView;
+import org.dhu.shiguang_market.order.dto.OrderDtos.OrderStatusHistoryView;
+import org.dhu.shiguang_market.order.dto.OrderDtos.ShippingView;
 import org.dhu.shiguang_market.order.model.OrderInfo;
 import org.dhu.shiguang_market.order.model.TradeOrder;
 import org.dhu.shiguang_market.order.service.OrderViewService;
@@ -100,6 +116,83 @@ class PlatformOperationServiceTests {
         assertEquals("buyer", result.items().getFirst().user().username());
         // UserSummary 本身不包含 phone/email/address，运营列表不会意外暴露联系方式。
         assertEquals(5, result.items().getFirst().user().getClass().getRecordComponents().length);
+    }
+
+    /** 平台详情应组合完整履约数据，同时固定排除地址、备注和可执行动作。 */
+    @Test
+    void orderDetailBuildsSafeCompleteView() {
+        OrderInfo order = order();
+        order.setUserId(8L);
+        order.setShopId(21L);
+        order.setOrderStatus(OrderStatus.COMPLETED);
+        order.setItemAmount(new BigDecimal("899"));
+        order.setFreightAmount(new BigDecimal("10"));
+        order.setPayableAmount(new BigDecimal("909"));
+        order.setRefundAmount(BigDecimal.ZERO);
+        order.setCompletedAt(LocalDateTime.of(2026, 8, 10, 15, 20));
+
+        TradeOrder trade = trade();
+        trade.setPayExpireAt(LocalDateTime.of(2026, 8, 7, 10, 30));
+        trade.setPaidAt(LocalDateTime.of(2026, 8, 7, 10, 2));
+
+        SysUser buyer = new SysUser();
+        buyer.setId(8L);
+        buyer.setUsername("buyer");
+        buyer.setNickname("买家");
+        buyer.setStatus(UserStatus.ACTIVE);
+
+        OffsetDateTime shippedAt = OffsetDateTime.of(
+                2026, 8, 8, 9, 0, 0, 0, ZoneOffset.ofHours(8));
+        ShippingView shipping = new ShippingView("SF", "顺丰速运", "SF001", shippedAt);
+        OrderItemView item = new OrderItemView("30", "40", "50", "SPU001", "SKU001",
+                "时光降噪耳机 Pro", "曜石黑", java.util.Map.of("color", "曜石黑"), null,
+                "899.00", 1, "899.00", "10.00", "909.00", 0, "0.00",
+                ReservationStatus.DEDUCTED);
+        OrderStatusHistoryView history = new OrderStatusHistoryView(
+                OrderStatus.PENDING_RECEIPT, OrderStatus.COMPLETED, OrderOperationType.COMPLETE,
+                OperatorType.USER, null, order.getCompletedAt().atOffset(ZoneOffset.ofHours(8)));
+
+        when(orderMapper.selectById(2L)).thenReturn(order);
+        when(tradeMapper.selectById(1L)).thenReturn(trade);
+        when(userMapper.selectById(8L)).thenReturn(buyer);
+        when(orderViews.shop(order)).thenReturn(
+                new ShopSummary("21", "SHOP001", "测试店铺", null, ShopStatus.ACTIVE));
+        when(orderViews.displayStatus(order)).thenReturn(OrderDisplayStatus.COMPLETED);
+        when(orderViews.shipping(order)).thenReturn(shipping);
+        when(orderViews.items(2L)).thenReturn(List.of(item));
+        when(orderViews.history(2L)).thenReturn(List.of(history));
+
+        var result = service.orderDetail(2L);
+
+        assertEquals("O001", result.orderNo());
+        assertEquals("T001", result.tradeNo());
+        assertEquals("buyer", result.buyer().username());
+        assertEquals(OrderDisplayStatus.COMPLETED, result.displayStatus());
+        assertEquals("899.00", result.itemAmount());
+        assertEquals("10.00", result.freightAmount());
+        assertEquals("909.00", result.payableAmount());
+        assertEquals("SF001", result.shipping().trackingNo());
+        assertEquals("时光降噪耳机 Pro", result.items().getFirst().productName());
+        assertEquals(OrderOperationType.COMPLETE, result.history().getFirst().operationType());
+        assertNull(result.cancelledAt());
+
+        Set<String> fields = Arrays.stream(result.getClass().getRecordComponents())
+                .map(component -> component.getName()).collect(Collectors.toSet());
+        assertFalse(fields.contains("address"));
+        assertFalse(fields.contains("buyerRemark"));
+        assertFalse(fields.contains("availableActions"));
+    }
+
+    @Test
+    void orderDetailRejectsInvalidOrMissingOrder() {
+        BusinessException invalid = assertThrows(BusinessException.class,
+                () -> service.orderDetail(0L));
+        assertEquals("BAD_REQUEST", invalid.getCode());
+
+        when(orderMapper.selectById(999L)).thenReturn(null);
+        BusinessException missing = assertThrows(BusinessException.class,
+                () -> service.orderDetail(999L));
+        assertEquals("RESOURCE_NOT_FOUND", missing.getCode());
     }
 
     /** 输入交易号后，应串联返回交易、订单、支付、库存流水和钱包流水摘要。 */

@@ -12,6 +12,7 @@ import org.dhu.shiguang_market.common.model.MarketEnums.TradeStatus;
 import org.dhu.shiguang_market.common.security.CurrentUserService;
 import org.dhu.shiguang_market.task.dto.OperationDtos.BusinessTraceView;
 import org.dhu.shiguang_market.task.dto.OperationDtos.OperationAfterSaleView;
+import org.dhu.shiguang_market.task.dto.OperationDtos.OperationOrderDetailView;
 import org.dhu.shiguang_market.task.dto.OperationDtos.OperationOrderView;
 import org.dhu.shiguang_market.task.dto.OperationDtos.OperationPaymentView;
 import org.dhu.shiguang_market.task.dto.OperationDtos.OperationTradeView;
@@ -78,6 +79,12 @@ public class PlatformOperationController {
         authorize();
         return ApiResponse.success(service.orders(
                 orderNo, shopId, userId, orderStatus, paymentStatus, page, pageSize));
+    }
+
+    @GetMapping("/orders/{orderId}")
+    public ApiResponse<OperationOrderDetailView> orderDetail(@PathVariable long orderId) {
+        authorize();
+        return ApiResponse.success(service.orderDetail(orderId));
     }
 
     @GetMapping("/payments")

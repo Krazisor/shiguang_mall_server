@@ -7,6 +7,7 @@ import static org.dhu.shiguang_market.common.util.Formatters.time;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import java.util.List;
 import org.dhu.shiguang_market.common.api.CommonViews.AddressSnapshot;
+import org.dhu.shiguang_market.common.api.CommonViews.ShopSummary;
 import org.dhu.shiguang_market.common.model.MarketEnums.OrderDisplayStatus;
 import org.dhu.shiguang_market.aftersale.mapper.AfterSaleRequestMapper;
 import org.dhu.shiguang_market.identity.service.IdentityViewMapper;
@@ -67,7 +68,6 @@ public class OrderViewService {
     }
 
     public OrderSummaryView summary(OrderInfo order, TradeOrder trade) {
-        Shop shop = shopMapper.selectById(order.getShopId());
         List<OrderItem> items = itemMapper.selectList(new LambdaQueryWrapper<OrderItem>()
                 .eq(OrderItem::getOrderId, order.getId()).orderByAsc(OrderItem::getId));
         List<OrderItemSummaryView> itemSummary = items.stream().limit(3)
@@ -75,32 +75,47 @@ public class OrderViewService {
                         item.getImageUrl(), item.getQuantity())).toList();
         int totalQuantity = items.stream().mapToInt(OrderItem::getQuantity).sum();
         return new OrderSummaryView(id(order.getId()), order.getOrderNo(), id(order.getTradeId()),
-                trade.getTradeNo(), IdentityViewMapper.shop(shop), order.getOrderStatus(), displayStatus(order),
+                trade.getTradeNo(), shop(order), order.getOrderStatus(), displayStatus(order),
                 order.getPaymentStatus(), money(order.getPayableAmount()), money(order.getRefundAmount()),
                 itemSummary, items.size(), totalQuantity, time(order.getCreatedAt()), actions(order));
     }
 
     public OrderDetailView detail(OrderInfo order) {
         TradeOrder trade = tradeMapper.selectById(order.getTradeId());
+        return new OrderDetailView(id(order.getId()), order.getOrderNo(), id(order.getTradeId()),
+                trade.getTradeNo(), shop(order), order.getOrderStatus(), displayStatus(order), order.getPaymentStatus(),
+                money(order.getItemAmount()), money(order.getFreightAmount()), money(order.getPayableAmount()),
+                money(order.getRefundAmount()), order.getBuyerRemark(), address(trade), shipping(order),
+                items(order.getId()), history(order.getId()), actions(order));
+    }
+
+    public ShopSummary shop(OrderInfo order) {
         Shop shop = shopMapper.selectById(order.getShopId());
-        List<OrderItemView> items = itemMapper.selectList(new LambdaQueryWrapper<OrderItem>()
-                        .eq(OrderItem::getOrderId, order.getId()).orderByAsc(OrderItem::getId))
+        if (shop == null) {
+            throw new IllegalStateException("Order references a missing shop");
+        }
+        return IdentityViewMapper.shop(shop);
+    }
+
+    public List<OrderItemView> items(long orderId) {
+        return itemMapper.selectList(new LambdaQueryWrapper<OrderItem>()
+                        .eq(OrderItem::getOrderId, orderId).orderByAsc(OrderItem::getId))
                 .stream().map(this::item).toList();
-        List<OrderStatusHistoryView> history = historyMapper.selectList(
-                        new LambdaQueryWrapper<OrderStatusHistory>()
-                                .eq(OrderStatusHistory::getOrderId, order.getId())
-                                .orderByAsc(OrderStatusHistory::getCreatedAt).orderByAsc(OrderStatusHistory::getId))
+    }
+
+    public List<OrderStatusHistoryView> history(long orderId) {
+        return historyMapper.selectList(new LambdaQueryWrapper<OrderStatusHistory>()
+                        .eq(OrderStatusHistory::getOrderId, orderId)
+                        .orderByAsc(OrderStatusHistory::getCreatedAt).orderByAsc(OrderStatusHistory::getId))
                 .stream().map(value -> new OrderStatusHistoryView(value.getFromStatus(), value.getToStatus(),
                         value.getOperationType(), value.getOperatorType(), value.getRemark(), time(value.getCreatedAt())))
                 .toList();
-        ShippingView shipping = order.getShippedAt() == null ? null
+    }
+
+    public ShippingView shipping(OrderInfo order) {
+        return order.getShippedAt() == null ? null
                 : new ShippingView(order.getCarrierCode(), order.getCarrierName(),
                 order.getTrackingNo(), time(order.getShippedAt()));
-        return new OrderDetailView(id(order.getId()), order.getOrderNo(), id(order.getTradeId()),
-                trade.getTradeNo(), IdentityViewMapper.shop(shop), order.getOrderStatus(), displayStatus(order), order.getPaymentStatus(),
-                money(order.getItemAmount()), money(order.getFreightAmount()), money(order.getPayableAmount()),
-                money(order.getRefundAmount()), order.getBuyerRemark(), address(trade), shipping,
-                items, history, actions(order));
     }
 
     private OrderItemView item(OrderItem item) {
@@ -122,7 +137,7 @@ public class OrderViewService {
      * 订单履约状态与售后状态是两个独立状态机。这里仅计算面向订单界面的聚合展示状态，
      * 不改写 order_info.order_status，避免影响发货、确认收货及后台筛选等履约逻辑。
      */
-    private OrderDisplayStatus displayStatus(OrderInfo order) {
+    public OrderDisplayStatus displayStatus(OrderInfo order) {
         if (afterSaleMapper.existsActiveByOrderId(order.getId())
                 || afterSaleMapper.existsPendingAppealByOrderId(order.getId())) {
             return OrderDisplayStatus.AFTER_SALE;

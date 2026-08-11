@@ -21,7 +21,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
-/** 阶段五平台运营只读接口测试，可直接单独运行查看五类查询结果。 */
+/** 阶段五平台运营只读接口测试。 */
 class PlatformOperationControllerTests {
     private final PlatformOperationService service = mock(PlatformOperationService.class);
     private final CurrentUserService currentUser = mock(CurrentUserService.class);
@@ -33,18 +33,20 @@ class PlatformOperationControllerTests {
                 .setControllerAdvice(new GlobalExceptionHandler()).build();
     }
 
-    /** 五个接口都必须先校验平台运营读取权限，再委托给只读查询服务。 */
+    /** 所有接口都必须先校验平台运营读取权限，再委托给只读查询服务。 */
     @Test
     void allOperationRoutesRequirePermissionAndDelegate() throws Exception {
         perform("/api/platform/operations/trades");
         perform("/api/platform/operations/orders");
+        perform("/api/platform/operations/orders/711");
         perform("/api/platform/operations/payments");
         perform("/api/platform/operations/after-sales");
         perform("/api/platform/operations/business/TRADE/T202608070001");
 
-        verify(currentUser, times(5)).requirePermission("platform:operation:read");
+        verify(currentUser, times(6)).requirePermission("platform:operation:read");
         verify(service).trades(isNull(), isNull(), isNull(), isNull(), isNull(), eq(1L), eq(20L));
         verify(service).orders(isNull(), isNull(), isNull(), isNull(), isNull(), eq(1L), eq(20L));
+        verify(service).orderDetail(711L);
         verify(service).payments(isNull(), isNull(), isNull(), eq(1L), eq(20L));
         verify(service).afterSales(isNull(), isNull(), isNull(), isNull(), isNull(), eq(1L), eq(20L));
         verify(service).trace("TRADE", "T202608070001");
