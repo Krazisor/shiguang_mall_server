@@ -23,11 +23,12 @@
 | 15 | [`schema.sql`](../sql/schema.sql) | 后端、DBA | MySQL 8.0.16+ 空库初始化物理结构及 RBAC 种子数据，不回写历史发布内容 |
 | 16 | [`schema2.sql`](../sql/schema2.sql) | 后端、DBA | 当前完整版本必需的增量迁移，可重复执行 |
 | 17 | [`scheme3.sql`](../sql/scheme3.sql) | 后端、DBA | 本期售后申诉、商家通知、对象存储元数据，以及三期商家钱包和权限的增量迁移；与当前 Java 实现配套 |
-| 18 | [`scheme7.sql`](../sql/scheme7.sql) | 后端、DBA | 修正售后申诉时间约束；正常按编号在 `scheme6.sql` 后执行，紧急修复时最低只依赖 `scheme3.sql` |
+| 18 | [`scheme6.sql`](../sql/scheme6.sql) | 后端、DBA | 优惠券活动、模板、用户券、兑换码、核销分摊、预算账本以及交易/结算优惠字段迁移；按 `scheme3.sql` 后执行 |
+| 19 | [`scheme7.sql`](../sql/scheme7.sql) | 后端、DBA | 修正售后申诉时间约束；正常按编号在 `scheme6.sql` 后执行，紧急修复时最低只依赖 `scheme3.sql` |
 
 ## 2. 当前版本与开发阶段
 
-`phase-1-*`、`phase-2-*` 文件名为历史稳定名称，当前只表示两个已冻结功能分册，不表示可独立部署的数据库版本。三期文档记录已落地的扩展能力和对应契约；真实银行或第三方财务出款仍不做。
+`phase-1-*`、`phase-2-*` 文件名为历史稳定名称，当前只表示两个已冻结功能分册，不表示可独立部署的数据库版本。三期文档记录已落地的扩展能力和对应契约；优惠券模块的产品、接口、数据库和运维规范分别见 `product/coupon-requirements.md`、`api/coupon-api.md`、`database/coupon-design.md`、`development/coupon-implementation-and-operations.md`，其物理结构由 `scheme6.sql` 提供。真实银行或第三方财务出款仍不做。
 
 整个开发过程仍分为两个实施阶段，但后端不再按原一期/二期机械分人：
 
