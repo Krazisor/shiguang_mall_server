@@ -169,6 +169,8 @@ MinIO 是三期唯一的对象存储实现。应用不接受客户端直接指�
 | `decided_by`、`decision_comment`、`decided_at` | 可空 | 平台操作者、裁决理由和时间 |
 | `version`、`created_at`、`updated_at` | 版本和审计时间 | 申诉并发控制及生命周期 |
 
+`merchant_reviewed_at` 是申诉创建时从原售后单复制的历史审核时间，正常情况下早于申诉的 `created_at`，不属于申诉自身生命周期的起点。数据库不比较两者，避免应用时钟和数据库时钟的细微偏差阻断正常申诉；平台 `decided_at` 仍不得早于申诉创建时间。已执行 `scheme3.sql` 的数据库必须继续执行 `scheme7.sql`，以替换早期版本中错误的跨生命周期 `chk_after_sale_appeal_times` 比较。
+
 `PENDING` 不得有裁决字段；`APPROVED` 必须有正数批准数量/金额和完整裁决信息；`REJECTED` 不得有批准金额，但必须有裁决人、原因和时间。
 
 ### 3.7 `merchant_notification`
