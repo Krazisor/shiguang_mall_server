@@ -17,6 +17,7 @@ import java.util.stream.Collectors;
 import org.dhu.shiguang_market.common.api.PageView;
 import org.dhu.shiguang_market.common.exception.BusinessException;
 import org.dhu.shiguang_market.common.model.MarketEnums.EnabledStatus;
+import org.dhu.shiguang_market.common.model.MarketEnums.CouponScopeType;
 import org.dhu.shiguang_market.common.model.MarketEnums.ProductStatus;
 import org.dhu.shiguang_market.common.model.MarketEnums.ShopStatus;
 import org.dhu.shiguang_market.identity.service.IdentityViewMapper;
@@ -162,6 +163,47 @@ public class PublicCatalogService {
                 .filter(java.util.Objects::nonNull)
                 .toList();
         return PageView.of(result, cards);
+    }
+
+    public PageView<ProductCardView> couponEligibleProducts(CouponScopeType scopeType,
+                                                            List<Long> targetIds,
+                                                            Long ownerShopId,
+                                                            String keyword,
+                                                            long page,
+                                                            long pageSize,
+                                                            String sort) {
+        validatePage(page, pageSize);
+        LambdaQueryWrapper<ProductSpu> query = new LambdaQueryWrapper<ProductSpu>()
+                .eq(ProductSpu::getStatus, ProductStatus.ON_SHELF)
+                .inSql(ProductSpu::getShopId, "SELECT id FROM shop WHERE status = 'ACTIVE'")
+                .inSql(ProductSpu::getId, "SELECT spu_id FROM product_sku WHERE deleted_at IS NULL AND status = 'ENABLED'");
+        if (keyword != null && !keyword.trim().isEmpty()) {
+            query.and(value -> value.like(ProductSpu::getProductName, keyword.trim())
+                    .or().like(ProductSpu::getSpuNo, keyword.trim()));
+        }
+        if (ownerShopId != null) query.eq(ProductSpu::getShopId, ownerShopId);
+        switch (scopeType) {
+            case ALL -> { }
+            case SHOP -> query.in(ProductSpu::getShopId, targetIds);
+            case CATEGORY -> {
+                Set<Long> categories = new java.util.HashSet<>();
+                targetIds.forEach(id -> categories.addAll(descendantIds(id)));
+                query.in(ProductSpu::getCategoryId, categories);
+            }
+            case SPU -> query.in(ProductSpu::getId, targetIds);
+            case SKU -> query.inSql(ProductSpu::getId, "SELECT spu_id FROM product_sku WHERE id IN ("
+                    + targetIds.stream().map(String::valueOf).collect(Collectors.joining(","))
+                    + ") AND deleted_at IS NULL AND status = 'ENABLED'");
+        }
+        switch (sort == null ? "createdAt,desc" : sort) {
+            case "createdAt,desc" -> query.orderByDesc(ProductSpu::getCreatedAt);
+            case "productName,asc" -> query.orderByAsc(ProductSpu::getProductName);
+            default -> throw BusinessException.badRequest("BAD_REQUEST", "不支持的排序字段");
+        }
+        query.orderByDesc(ProductSpu::getId);
+        Page<ProductSpu> result = spuMapper.selectPage(Page.of(page, pageSize), query);
+        return PageView.of(result, result.getRecords().stream().map(this::cardView)
+                .filter(java.util.Objects::nonNull).toList());
     }
 
     public ProductDetailView product(long spuId) {

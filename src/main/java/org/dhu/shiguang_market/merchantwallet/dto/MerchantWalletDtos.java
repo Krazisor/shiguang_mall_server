@@ -39,8 +39,10 @@ public final class MerchantWalletDtos {
 
     public record ShopSettlementView(String settlementId, String shopId, String orderId,
             String orderNo, String tradeId, String tradeNo, SettlementStatus status,
-            String grossAmount, String commissionRate, boolean commissionRefundable,
-            String commissionAmount, String buyerRefundAmount, String commissionRefundAmount,
+            String grossAmount, String buyerPaidAmount, String platformCouponSubsidyAmount,
+            String shopCouponDiscountAmount, String commissionRate, boolean commissionRefundable,
+            String commissionAmount, String buyerRefundAmount, String platformSubsidyRefundAmount,
+            String commissionRefundAmount,
             String merchantRefundAmount, String netAmount, String pendingAmount,
             String releasedAmount, OffsetDateTime availableAt, OffsetDateTime settledAt,
             OffsetDateTime createdAt, OffsetDateTime updatedAt) {}

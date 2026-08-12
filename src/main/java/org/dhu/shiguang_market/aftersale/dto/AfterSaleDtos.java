@@ -155,11 +155,16 @@ public final class AfterSaleDtos {
 
     // ─── 买家端视图 ───
 
+    public record CouponRestoreHintView(boolean restorableOnlyAfterFullTradeRefund,
+                                        boolean currentRequestWillRestore, String reason) { }
+
     public record AfterSaleEligibilityView(
             String orderId, String orderItemId, OrderStatus orderStatus,
             int purchasedQuantity, int refundedQuantity, int occupiedQuantity,
-            int maximumRequestQuantity, String itemPayableAmount, String refundedAmount,
+            int maximumRequestQuantity, String itemGrossAmount, String couponDiscountAmount,
+            String itemPayableAmount, String refundedAmount,
             String occupiedAmount, String maximumRequestAmount,
+            CouponRestoreHintView couponRestoreHint,
             List<AfterSaleType> supportedTypes, OffsetDateTime eligibleUntil,
             boolean eligible, String ineligibleReason) {
     }

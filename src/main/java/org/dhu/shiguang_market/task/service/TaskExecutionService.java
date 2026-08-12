@@ -22,6 +22,7 @@ import org.dhu.shiguang_market.common.model.MarketEnums.ReservationStatus;
 import org.dhu.shiguang_market.common.model.MarketEnums.TradeStatus;
 import org.dhu.shiguang_market.common.util.NumberGenerator;
 import org.dhu.shiguang_market.common.util.RequestContext;
+import org.dhu.shiguang_market.coupon.service.CouponReservationService;
 import org.dhu.shiguang_market.inventory.mapper.InventoryStockMapper;
 import org.dhu.shiguang_market.inventory.mapper.InventoryTransactionMapper;
 import org.dhu.shiguang_market.inventory.model.InventoryStock;
@@ -45,6 +46,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.beans.factory.annotation.Autowired;
 
 /**
  * 阶段五任务统一执行入口。
@@ -67,6 +69,7 @@ public class TaskExecutionService {
     private final ShopAfterSaleService afterSaleService;
     private final WalletAccountMapper walletMapper;
     private final NumberGenerator numbers;
+    private CouponReservationService couponReservations;
 
     public TaskExecutionService(TaskLockService locks, TradeOrderMapper tradeMapper,
                                 OrderInfoMapper orderMapper, OrderItemMapper itemMapper,
@@ -87,6 +90,11 @@ public class TaskExecutionService {
         this.afterSaleService = afterSaleService;
         this.walletMapper = walletMapper;
         this.numbers = numbers;
+    }
+
+    @Autowired(required = false)
+    public void setCouponReservations(CouponReservationService couponReservations) {
+        this.couponReservations = couponReservations;
     }
 
     /** 取消超过 payExpireAt 的待支付交易，并释放尚未消费的锁定库存。 */
@@ -199,6 +207,7 @@ public class TaskExecutionService {
             return false;
         }
         LocalDateTime now = LocalDateTime.now();
+        if (couponReservations != null) couponReservations.release(tradeId, "PAYMENT_TIMEOUT");
         List<OrderInfo> orders = orderMapper.selectList(new LambdaQueryWrapper<OrderInfo>()
                 .eq(OrderInfo::getTradeId, tradeId).orderByAsc(OrderInfo::getId));
         for (OrderInfo order : orders) {

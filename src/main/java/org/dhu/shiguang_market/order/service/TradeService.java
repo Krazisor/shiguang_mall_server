@@ -40,6 +40,11 @@ import org.dhu.shiguang_market.order.model.OrderInfo;
 import org.dhu.shiguang_market.order.model.OrderItem;
 import org.dhu.shiguang_market.order.model.OrderStatusHistory;
 import org.dhu.shiguang_market.order.model.TradeOrder;
+import org.dhu.shiguang_market.coupon.service.CouponQuoteService;
+import org.dhu.shiguang_market.coupon.service.CouponQuoteService.QuoteResult;
+import org.dhu.shiguang_market.coupon.service.CouponReservationService;
+import org.dhu.shiguang_market.coupon.service.CouponEligibilityService;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -60,6 +65,9 @@ public class TradeService {
     private final NumberGenerator numbers;
     private final OrderViewService views;
     private final long timeoutMinutes;
+    private CouponQuoteService couponQuotes;
+    private CouponReservationService couponReservations;
+    private CouponEligibilityService couponEligibility;
 
     public TradeService(TradeOrderMapper tradeMapper, OrderInfoMapper orderMapper,
                         OrderItemMapper itemMapper, OrderStatusHistoryMapper historyMapper,
@@ -85,6 +93,21 @@ public class TradeService {
         this.timeoutMinutes = timeoutMinutes;
     }
 
+    @org.springframework.beans.factory.annotation.Autowired
+    public void setCouponQuotes(CouponQuoteService couponQuotes) {
+        this.couponQuotes = couponQuotes;
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public void setCouponReservations(CouponReservationService couponReservations) {
+        this.couponReservations = couponReservations;
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    public void setCouponEligibility(CouponEligibilityService couponEligibility) {
+        this.couponEligibility = couponEligibility;
+    }
+
     @Transactional
     public TradeDetailView create(CreateTradeRequest request, String key) {
         currentUser.requirePermission("trade:create");
@@ -106,24 +129,60 @@ public class TradeService {
         if (lines.stream().anyMatch(line -> !line.valid())) {
             throw BusinessException.unprocessable("CHECKOUT_ITEMS_INVALID", "结算项存在无效商品或库存不足");
         }
+        QuoteResult quote = request.couponQuoteToken() == null || couponQuotes == null ? null
+                : couponQuotes.verify(userId, request.couponQuoteToken(), lines);
         BigDecimal total = lines.stream().map(CheckoutLine::amount).reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal discount = quote == null || quote.result() == null ? BigDecimal.ZERO
+                : BigDecimal.valueOf(quote.result().totalDiscountCents(), 2);
+        boolean usesFirstOrderCoupon = couponEligibility != null && quote != null && quote.result() != null
+                && couponEligibility.usesFirstOrderCoupon(quote.result().coupons().stream()
+                .map(applied -> applied.coupon().templateId()).toList());
+        if (usesFirstOrderCoupon) {
+            if (couponEligibility.hasPaidTrade(userId)) {
+                throw BusinessException.unprocessable("COUPON_FIRST_ORDER_QUALIFICATION_LOST",
+                        "用户已完成其他首单");
+            }
+            TradeOrder pending = tradeMapper.selectOne(new LambdaQueryWrapper<TradeOrder>()
+                    .eq(TradeOrder::getUserId, userId)
+                    .eq(TradeOrder::getTradeStatus, TradeStatus.PENDING_PAYMENT)
+                    .eq(TradeOrder::getUsesFirstOrderCoupon, true)
+                    .orderByAsc(TradeOrder::getId).last("LIMIT 1"));
+            if (pending != null) firstOrderTradeExists();
+        }
         TradeOrder trade = new TradeOrder();
         trade.setTradeNo(tradeNo);
         trade.setUserId(userId);
         trade.setTradeStatus(TradeStatus.PENDING_PAYMENT);
-        trade.setPayableAmount(total);
+        trade.setGrossAmount(total);
+        trade.setCouponDiscountAmount(discount);
+        trade.setUsesFirstOrderCoupon(usesFirstOrderCoupon);
+        trade.setPayableAmount(total.subtract(discount));
         copyAddress(address, trade);
         trade.setPayExpireAt(LocalDateTime.now().plusMinutes(timeoutMinutes));
         trade.setVersion(0);
-        tradeMapper.insert(trade);
+        try {
+            tradeMapper.insert(trade);
+        } catch (DuplicateKeyException ex) {
+            if (usesFirstOrderCoupon) firstOrderTradeExists();
+            throw ex;
+        }
 
         Map<Long, List<CheckoutLine>> byShop = new LinkedHashMap<>();
+        Map<Long, OrderItem> orderItems = new LinkedHashMap<>();
         lines.forEach(line -> byShop.computeIfAbsent(line.shop().getId(), ignored -> new ArrayList<>()).add(line));
         for (Map.Entry<Long, List<CheckoutLine>> entry : byShop.entrySet()) {
-            createOrder(trade, entry.getKey(), entry.getValue(), request.shopRemarks());
+            createOrder(trade, entry.getKey(), entry.getValue(), request.shopRemarks(), quote, orderItems);
+        }
+        if (couponReservations != null && quote != null) {
+            couponReservations.reserve(userId, trade.getId(), quote.result(), orderItems);
         }
         cartItems.forEach(item -> cartService.delete(item.getId()));
         return views.trade(tradeMapper.selectById(trade.getId()));
+    }
+
+    private void firstOrderTradeExists() {
+        throw BusinessException.conflict("COUPON_FIRST_ORDER_TRADE_EXISTS",
+                "已有一张使用首单券的待支付父交易");
     }
 
     public TradeDetailView detail(long tradeId) {
@@ -137,6 +196,7 @@ public class TradeService {
         if (trade.getTradeStatus() != TradeStatus.PENDING_PAYMENT) {
             throw BusinessException.conflict("TRADE_NOT_CANCELLABLE", "交易当前不可取消");
         }
+        if (couponReservations != null) couponReservations.release(tradeId, "USER_CANCEL");
         List<OrderInfo> orders = orderMapper.selectList(new LambdaQueryWrapper<OrderInfo>()
                 .eq(OrderInfo::getTradeId, tradeId).orderByAsc(OrderInfo::getId));
         for (OrderInfo order : orders) {
@@ -174,8 +234,13 @@ public class TradeService {
     }
 
     private void createOrder(TradeOrder trade, long shopId, List<CheckoutLine> lines,
-                             Map<String, String> remarks) {
+                             Map<String, String> remarks, QuoteResult quote,
+                             Map<Long, OrderItem> orderItems) {
         BigDecimal amount = lines.stream().map(CheckoutLine::amount).reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal discount = quote == null || quote.result() == null ? BigDecimal.ZERO : lines.stream()
+                .map(line -> BigDecimal.valueOf(quote.result().lineDiscounts()
+                        .getOrDefault(line.cart().getId(), 0L), 2))
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
         OrderInfo order = new OrderInfo();
         order.setOrderNo(numbers.next("OR"));
         order.setTradeId(trade.getId());
@@ -186,7 +251,8 @@ public class TradeService {
         order.setPaymentStatus(OrderPaymentStatus.UNPAID);
         order.setItemAmount(amount);
         order.setFreightAmount(BigDecimal.ZERO.setScale(2));
-        order.setPayableAmount(amount);
+        order.setCouponDiscountAmount(discount);
+        order.setPayableAmount(amount.subtract(discount));
         order.setRefundAmount(BigDecimal.ZERO.setScale(2));
         order.setBuyerRemark(remarks == null ? null : remarks.get(Long.toString(shopId)));
         order.setVersion(0);
@@ -215,11 +281,16 @@ public class TradeService {
             item.setQuantity(line.cart().getQuantity());
             item.setOriginalAmount(line.amount());
             item.setFreightAmount(BigDecimal.ZERO.setScale(2));
-            item.setPayableAmount(line.amount());
+            BigDecimal itemDiscount = quote == null || quote.result() == null ? BigDecimal.ZERO
+                    : BigDecimal.valueOf(quote.result().lineDiscounts()
+                    .getOrDefault(line.cart().getId(), 0L), 2);
+            item.setCouponDiscountAmount(itemDiscount);
+            item.setPayableAmount(line.amount().subtract(itemDiscount));
             item.setRefundedQuantity(0);
             item.setRefundedAmount(BigDecimal.ZERO.setScale(2));
             item.setReservationStatus(ReservationStatus.LOCKED);
             itemMapper.insert(item);
+            orderItems.put(line.cart().getId(), item);
         }
         historyMapper.insert(history(order.getId(), null, OrderStatus.PENDING_PAYMENT,
                 OrderOperationType.CREATE, trade.getUserId(), null));

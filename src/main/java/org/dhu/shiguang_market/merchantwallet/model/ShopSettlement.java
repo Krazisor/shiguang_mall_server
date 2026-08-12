@@ -20,10 +20,14 @@ public class ShopSettlement {
     private Long orderId;
     private SettlementStatus status;
     private BigDecimal grossAmount;
+    private BigDecimal buyerPaidAmount;
+    private BigDecimal platformCouponSubsidyAmount;
+    private BigDecimal shopCouponDiscountAmount;
     private BigDecimal commissionRate;
     private Boolean commissionRefundable;
     private BigDecimal commissionAmount;
     private BigDecimal buyerRefundAmount;
+    private BigDecimal platformSubsidyRefundAmount;
     private BigDecimal commissionRefundAmount;
     private BigDecimal merchantRefundAmount;
     private BigDecimal netAmount;

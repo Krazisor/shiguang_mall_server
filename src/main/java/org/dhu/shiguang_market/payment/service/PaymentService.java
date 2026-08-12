@@ -39,6 +39,8 @@ import org.dhu.shiguang_market.payment.model.WalletTransaction;
 import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.dhu.shiguang_market.integration.merchantwallet.MerchantSettlementPort;
+import org.dhu.shiguang_market.coupon.service.CouponReservationService;
+import org.dhu.shiguang_market.coupon.service.CouponEligibilityService;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
@@ -53,6 +55,8 @@ public class PaymentService {
     private final IdempotencyService idempotency;
     private final NumberGenerator numbers;
     private MerchantSettlementPort merchantSettlement;
+    private CouponReservationService couponReservations;
+    private CouponEligibilityService couponEligibility;
 
     @Autowired
     public PaymentService(PaymentOrderMapper paymentMapper, TradeOrderMapper tradeMapper,
@@ -74,6 +78,16 @@ public class PaymentService {
     @Autowired(required = false)
     public void setMerchantSettlement(MerchantSettlementPort merchantSettlement) {
         this.merchantSettlement = merchantSettlement;
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public void setCouponReservations(CouponReservationService couponReservations) {
+        this.couponReservations = couponReservations;
+    }
+
+    @Autowired(required = false)
+    public void setCouponEligibility(CouponEligibilityService couponEligibility) {
+        this.couponEligibility = couponEligibility;
     }
 
     @Transactional
@@ -144,6 +158,12 @@ public class PaymentService {
             fail(payment, "WALLET_UNAVAILABLE");
             throw BusinessException.unprocessable("WALLET_UNAVAILABLE", "钱包不可用");
         }
+        if (Boolean.TRUE.equals(trade.getUsesFirstOrderCoupon()) && couponEligibility != null
+                && couponEligibility.hasOtherPaidTradeForUpdate(userId, trade.getId())) {
+            fail(payment, "COUPON_FIRST_ORDER_QUALIFICATION_LOST");
+            throw BusinessException.unprocessable("COUPON_FIRST_ORDER_QUALIFICATION_LOST",
+                    "用户已完成其他首单");
+        }
         BigDecimal before = wallet.getBalance();
         if (walletMapper.debit(userId, payment.getAmount()) != 1) {
             fail(payment, "WALLET_INSUFFICIENT_BALANCE");
@@ -170,6 +190,7 @@ public class PaymentService {
         trade.setTradeStatus(TradeStatus.PAID);
         trade.setPaidAt(now);
         tradeMapper.updateById(trade);
+        if (couponReservations != null) couponReservations.consume(trade.getId());
         List<OrderInfo> orders = orderMapper.selectList(new LambdaQueryWrapper<OrderInfo>()
                 .eq(OrderInfo::getTradeId, trade.getId()).orderByAsc(OrderInfo::getId));
         for (OrderInfo order : orders) {

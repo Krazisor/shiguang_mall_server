@@ -50,6 +50,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.annotation.Transactional;
 import org.dhu.shiguang_market.integration.merchantwallet.MerchantSettlementPort;
+import org.dhu.shiguang_market.coupon.service.CouponRefundService;
 
 /**
  * 商家端售后 Service。
@@ -91,6 +92,7 @@ public class ShopAfterSaleService {
     private final IdempotencyService idempotency;
     private final NumberGenerator numbers;
     private MerchantSettlementPort merchantSettlement;
+    private CouponRefundService couponRefunds;
 
     public ShopAfterSaleService(AfterSaleRequestMapper afterSaleMapper, OrderItemMapper itemMapper,
                                 OrderInfoMapper orderMapper, InventoryStockMapper stockMapper,
@@ -117,6 +119,11 @@ public class ShopAfterSaleService {
     @Autowired(required = false)
     public void setMerchantSettlement(MerchantSettlementPort merchantSettlement) {
         this.merchantSettlement = merchantSettlement;
+    }
+
+    @Autowired(required = false)
+    public void setCouponRefunds(CouponRefundService couponRefunds) {
+        this.couponRefunds = couponRefunds;
     }
 
     // ══════════════════════════════════════════════════════════════
@@ -614,8 +621,11 @@ public class ShopAfterSaleService {
         if (wallet.getStatus() != org.dhu.shiguang_market.common.model.MarketEnums.WalletStatus.ACTIVE) {
             throw BusinessException.unprocessable("WALLET_UNAVAILABLE", "钱包不可用");
         }
+        BigDecimal platformSubsidyReversal = couponRefunds == null ? BigDecimal.ZERO
+                : couponRefunds.preview(item, ar.getApprovedQuantity()).platformSubsidyReversal();
         if (merchantSettlement != null
-                && !merchantSettlement.recordMerchantRefund(order, ar.getApprovedAmount(), ar.getRefundNo(), operatorId)) {
+                && !merchantSettlement.recordMerchantRefund(order, ar.getApprovedAmount(),
+                platformSubsidyReversal, ar.getRefundNo(), operatorId)) {
             throw BusinessException.unprocessable("MERCHANT_WALLET_REFUND_INSUFFICIENT", "商家可冲回余额不足，需平台人工追缴");
         }
         BigDecimal before = wallet.getBalance();
@@ -653,6 +663,8 @@ public class ShopAfterSaleService {
         if (orderMapper.updateById(order) != 1) {
             throw new IllegalStateException("子订单累计退款更新失败");
         }
+
+        if (couponRefunds != null) couponRefunds.recordSuccessfulRefund(ar, item);
 
         // 标记售后完成
         ar.setRefundStatus(RefundStatus.SUCCESS);

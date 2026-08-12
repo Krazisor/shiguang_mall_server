@@ -78,7 +78,8 @@ public final class MarketEnums {
 
     public enum AssetPurpose implements StringCodeEnum {
         AVATAR, SHOP_LOGO, BRAND_LOGO, PRODUCT_COVER, PRODUCT_GALLERY,
-        SKU_IMAGE, RICH_TEXT_IMAGE, AFTER_SALE_EVIDENCE, APPEAL_EVIDENCE
+        SKU_IMAGE, RICH_TEXT_IMAGE, AFTER_SALE_EVIDENCE, APPEAL_EVIDENCE,
+        COUPON_ACTIVITY_BANNER
     }
 
     public enum AssetStatus implements StringCodeEnum { ACTIVE, DELETED }
@@ -115,4 +116,56 @@ public final class MarketEnums {
     }
 
     public enum WithdrawalDestinationType implements StringCodeEnum { VIRTUAL_ACCOUNT }
+
+    public enum CouponOwnerType implements StringCodeEnum { PLATFORM, SHOP }
+
+    public enum CouponType implements StringCodeEnum {
+        PERCENTAGE, THRESHOLD_REDUCTION, CASH_RED_PACKET
+    }
+
+    public enum CouponFundingType implements StringCodeEnum { PLATFORM, SHOP, SHARED }
+
+    public enum CouponScopeType implements StringCodeEnum { ALL, SHOP, CATEGORY, SPU, SKU }
+
+    public enum CouponDistributionType implements StringCodeEnum {
+        PUBLIC_CLAIM, FLASH_CLAIM, REDEEM_CODE, DIRECT_GRANT, SYSTEM_GRANT
+    }
+
+    public enum CouponAudienceType implements StringCodeEnum {
+        ALL_USERS, NEW_USERS, FIRST_ORDER_USERS, SPECIFIED_USERS
+    }
+
+    public enum CouponValidityType implements StringCodeEnum { FIXED_RANGE, RELATIVE_AFTER_CLAIM }
+
+    public enum CouponStackMode implements StringCodeEnum { EXCLUSIVE, CROSS_OWNER }
+
+    public enum CouponRestorePolicy implements StringCodeEnum { NEVER, FULL_TRADE_ONLY }
+
+    public enum CouponTemplateStatus implements StringCodeEnum { DRAFT, ACTIVE, PAUSED, ENDED }
+
+    public enum UserCouponStatus implements StringCodeEnum {
+        AVAILABLE, LOCKED, USED, EXPIRED, REVOKED
+    }
+
+    public enum CouponActivityType implements StringCodeEnum {
+        COUPON_CENTER, FLASH_CLAIM, NEW_USER_WELCOME, TARGETED_CAMPAIGN
+    }
+
+    public enum CouponActivityStatus implements StringCodeEnum {
+        DRAFT, SCHEDULED, RUNNING, PAUSED, ENDED, CANCELLED
+    }
+
+    public enum CouponSelectionMode implements StringCodeEnum { AUTO, MANUAL, NONE }
+
+    public enum CouponRedemptionStatus implements StringCodeEnum {
+        RESERVED, CONSUMED, RELEASED, RESTORED
+    }
+
+    public enum CouponFundingParticipationStatus implements StringCodeEnum {
+        PENDING, ACCEPTED, REJECTED, CANCELLED
+    }
+
+    public enum CouponFundingDecision implements StringCodeEnum { ACCEPT, REJECT }
+
+    public enum CouponRedeemCodeStatus implements StringCodeEnum { ACTIVE, REDEEMED, REVOKED }
 }

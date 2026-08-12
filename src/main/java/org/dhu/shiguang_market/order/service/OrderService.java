@@ -25,6 +25,7 @@ import org.dhu.shiguang_market.order.dto.OrderDtos.OrderDetailView;
 import org.dhu.shiguang_market.order.dto.OrderDtos.OrderSummaryView;
 import org.dhu.shiguang_market.order.dto.OrderDtos.ShipOrderRequest;
 import org.dhu.shiguang_market.order.dto.OrderDtos.ShopOrderSummaryView;
+import org.dhu.shiguang_market.order.dto.OrderDtos.ShopOrderDetailView;
 import org.dhu.shiguang_market.order.mapper.OrderInfoMapper;
 import org.dhu.shiguang_market.order.mapper.OrderItemMapper;
 import org.dhu.shiguang_market.order.mapper.OrderStatusHistoryMapper;
@@ -122,14 +123,14 @@ public class OrderService {
         }).toList());
     }
 
-    public OrderDetailView shopDetail(long shopId, long orderId) {
+    public ShopOrderDetailView shopDetail(long shopId, long orderId) {
         shopAccess.require(shopId, "shop:order:read");
         OrderInfo order = scoped(shopId, orderId);
-        return views.detail(order);
+        return views.shopDetail(order);
     }
 
     @Transactional
-    public OrderDetailView ship(long shopId, long orderId, ShipOrderRequest request) {
+    public ShopOrderDetailView ship(long shopId, long orderId, ShipOrderRequest request) {
         shopAccess.require(shopId, "shop:order:ship");
         if (orderMapper.exists(new LambdaQueryWrapper<OrderInfo>()
                 .eq(OrderInfo::getTrackingNo, request.trackingNo()).ne(OrderInfo::getId, orderId))) {
@@ -175,7 +176,7 @@ public class OrderService {
         orderMapper.updateById(order);
         historyMapper.insert(history(orderId, OrderStatus.PENDING_SHIPMENT, OrderStatus.PENDING_RECEIPT,
                 OrderOperationType.SHIP, OperatorType.SHOP, currentUser.id(), null));
-        return views.detail(orderMapper.selectById(orderId));
+        return views.shopDetail(orderMapper.selectById(orderId));
     }
 
     /**

@@ -16,6 +16,8 @@ import java.util.Set;
 import org.dhu.shiguang_market.common.api.CommonViews.ShopSummary;
 import org.dhu.shiguang_market.aftersale.dto.AfterSaleDtos.AfterSaleDetailView;
 import org.dhu.shiguang_market.aftersale.dto.AfterSaleDtos.AfterSaleEligibilityView;
+import org.dhu.shiguang_market.aftersale.dto.AfterSaleDtos.CouponRestoreHintView;
+import org.dhu.shiguang_market.coupon.service.CouponRefundService;
 import org.dhu.shiguang_market.aftersale.dto.AfterSaleDtos.AfterSaleItemSnapshot;
 import org.dhu.shiguang_market.aftersale.dto.AfterSaleDtos.AfterSaleOrderSnapshot;
 import org.dhu.shiguang_market.aftersale.dto.AfterSaleDtos.AfterSaleReviewView;
@@ -80,6 +82,7 @@ public class AfterSaleService {
     private final IdempotencyService idempotency;
     private final NumberGenerator numbers;
     private final ContentSafety contentSafety;
+    private CouponRefundService couponRefunds;
 
     @Autowired
     public AfterSaleService(AfterSaleRequestMapper afterSaleMapper, AfterSaleAppealMapper appealMapper,
@@ -105,6 +108,11 @@ public class AfterSaleService {
                             ContentSafety contentSafety) {
         this(afterSaleMapper, null, itemMapper, orderMapper, shopMapper, currentUser,
                 idempotency, numbers, contentSafety);
+    }
+
+    @Autowired(required = false)
+    public void setCouponRefunds(CouponRefundService couponRefunds) {
+        this.couponRefunds = couponRefunds;
     }
 
     // ══════════════════════════════════════════════════════════════
@@ -192,10 +200,19 @@ public class AfterSaleService {
             else ineligibleReason = "当前订单状态不支持售后";
         }
 
+        CouponRestoreHintView restoreHint = null;
+        if (couponRefunds != null) {
+            CouponRefundService.RestoreHint hint = couponRefunds.restoreHint(order, item);
+            if (hint != null) restoreHint = new CouponRestoreHintView(
+                    hint.restorableOnlyAfterFullTradeRefund(), hint.currentRequestWillRestore(), hint.reason());
+        }
+        BigDecimal gross = (item.getOriginalAmount() == null ? BigDecimal.ZERO : item.getOriginalAmount())
+                .add(item.getFreightAmount() == null ? BigDecimal.ZERO : item.getFreightAmount());
         return new AfterSaleEligibilityView(id(orderId), id(orderItemId), order.getOrderStatus(),
                 item.getQuantity(), refundedQuantity, occupiedQuantity,
-                maxQty, money(item.getPayableAmount()), money(refundedAmount),
-                money(occupiedAmount), money(maxAmt),
+                maxQty, money(gross), money(item.getCouponDiscountAmount() == null
+                ? BigDecimal.ZERO : item.getCouponDiscountAmount()), money(item.getPayableAmount()),
+                money(refundedAmount), money(occupiedAmount), money(maxAmt), restoreHint,
                 supportedTypes, eligibleUntil, eligible, ineligibleReason);
     }
 

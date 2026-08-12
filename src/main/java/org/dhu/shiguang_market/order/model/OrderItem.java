@@ -31,6 +31,7 @@ public class OrderItem {
     private Integer quantity;
     private BigDecimal originalAmount;
     private BigDecimal freightAmount;
+    private BigDecimal couponDiscountAmount;
     private BigDecimal payableAmount;
     private Integer refundedQuantity;
     private BigDecimal refundedAmount;

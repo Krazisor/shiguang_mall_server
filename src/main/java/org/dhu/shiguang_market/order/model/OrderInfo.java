@@ -24,6 +24,7 @@ public class OrderInfo {
     private OrderPaymentStatus paymentStatus;
     private BigDecimal itemAmount;
     private BigDecimal freightAmount;
+    private BigDecimal couponDiscountAmount;
     private BigDecimal payableAmount;
     private BigDecimal refundAmount;
     private String buyerRemark;

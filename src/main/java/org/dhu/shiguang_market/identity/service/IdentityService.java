@@ -36,6 +36,8 @@ import org.dhu.shiguang_market.shop.model.ShopUser;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.context.ApplicationEventPublisher;
+import org.dhu.shiguang_market.coupon.event.UserRegisteredEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -53,12 +55,14 @@ public class IdentityService {
     private final CurrentUserService currentUser;
     private final PasswordService passwordService;
     private final ContentSafety contentSafety;
+    private final ApplicationEventPublisher events;
 
+    @org.springframework.beans.factory.annotation.Autowired
     public IdentityService(SysUserMapper userMapper, SysRoleMapper roleMapper,
                            SysUserRoleMapper userRoleMapper, WalletProvisionPort walletProvision,
                            ShopMapper shopMapper, ShopUserMapper shopUserMapper,
                            CurrentUserService currentUser, PasswordService passwordService,
-                           ContentSafety contentSafety) {
+                           ContentSafety contentSafety, ApplicationEventPublisher events) {
         this.userMapper = userMapper;
         this.roleMapper = roleMapper;
         this.userRoleMapper = userRoleMapper;
@@ -68,6 +72,16 @@ public class IdentityService {
         this.currentUser = currentUser;
         this.passwordService = passwordService;
         this.contentSafety = contentSafety;
+        this.events = events;
+    }
+
+    public IdentityService(SysUserMapper userMapper, SysRoleMapper roleMapper,
+                           SysUserRoleMapper userRoleMapper, WalletProvisionPort walletProvision,
+                           ShopMapper shopMapper, ShopUserMapper shopUserMapper,
+                           CurrentUserService currentUser, PasswordService passwordService,
+                           ContentSafety contentSafety) {
+        this(userMapper, roleMapper, userRoleMapper, walletProvision, shopMapper, shopUserMapper,
+                currentUser, passwordService, contentSafety, event -> { });
     }
 
     @Transactional
@@ -103,6 +117,7 @@ public class IdentityService {
 
         // 通过 B 线端口创建钱包，避免身份模块直接操作 wallet_account 表。
         walletProvision.provision(user.getId());
+        events.publishEvent(new UserRegisteredEvent(java.util.UUID.randomUUID().toString(), user.getId(), LocalDateTime.now()));
         log.info("Registered user userId={}", user.getId());
         return user(user);
     }

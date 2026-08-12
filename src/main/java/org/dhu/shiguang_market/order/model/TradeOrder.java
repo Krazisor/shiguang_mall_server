@@ -17,6 +17,9 @@ public class TradeOrder {
     private String tradeNo;
     private Long userId;
     private TradeStatus tradeStatus;
+    private BigDecimal grossAmount;
+    private BigDecimal couponDiscountAmount;
+    private Boolean usesFirstOrderCoupon;
     private BigDecimal payableAmount;
     private String recipientName;
     private String recipientPhone;

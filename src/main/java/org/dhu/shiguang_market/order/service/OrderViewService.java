@@ -5,7 +5,10 @@ import static org.dhu.shiguang_market.common.util.Formatters.money;
 import static org.dhu.shiguang_market.common.util.Formatters.time;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import java.math.BigDecimal;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import org.dhu.shiguang_market.common.api.CommonViews.AddressSnapshot;
 import org.dhu.shiguang_market.common.api.CommonViews.ShopSummary;
 import org.dhu.shiguang_market.common.model.MarketEnums.OrderDisplayStatus;
@@ -17,7 +20,18 @@ import org.dhu.shiguang_market.order.dto.OrderDtos.OrderItemView;
 import org.dhu.shiguang_market.order.dto.OrderDtos.OrderStatusHistoryView;
 import org.dhu.shiguang_market.order.dto.OrderDtos.OrderSummaryView;
 import org.dhu.shiguang_market.order.dto.OrderDtos.ShippingView;
+import org.dhu.shiguang_market.order.dto.OrderDtos.ShopOrderDetailView;
 import org.dhu.shiguang_market.order.dto.OrderDtos.TradeDetailView;
+import org.dhu.shiguang_market.coupon.dto.CouponDtos.BuyerAppliedCouponView;
+import org.dhu.shiguang_market.coupon.dto.CouponDtos.OrderAppliedCouponView;
+import org.dhu.shiguang_market.coupon.mapper.CouponRedemptionAllocationMapper;
+import org.dhu.shiguang_market.coupon.mapper.CouponRedemptionMapper;
+import org.dhu.shiguang_market.coupon.mapper.CouponTemplateMapper;
+import org.dhu.shiguang_market.coupon.mapper.UserCouponMapper;
+import org.dhu.shiguang_market.coupon.model.CouponModels.CouponTemplate;
+import org.dhu.shiguang_market.coupon.model.CouponModels.Redemption;
+import org.dhu.shiguang_market.coupon.model.CouponModels.RedemptionAllocation;
+import org.dhu.shiguang_market.coupon.model.CouponModels.UserCoupon;
 import org.dhu.shiguang_market.order.mapper.OrderInfoMapper;
 import org.dhu.shiguang_market.order.mapper.OrderItemMapper;
 import org.dhu.shiguang_market.order.mapper.OrderStatusHistoryMapper;
@@ -29,6 +43,7 @@ import org.dhu.shiguang_market.order.model.TradeOrder;
 import org.dhu.shiguang_market.shop.mapper.ShopMapper;
 import org.dhu.shiguang_market.shop.model.Shop;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
 
 @Service
 public class OrderViewService {
@@ -38,6 +53,10 @@ public class OrderViewService {
     private final OrderStatusHistoryMapper historyMapper;
     private final ShopMapper shopMapper;
     private final AfterSaleRequestMapper afterSaleMapper;
+    private CouponRedemptionMapper redemptionMapper;
+    private CouponRedemptionAllocationMapper allocationMapper;
+    private UserCouponMapper couponMapper;
+    private CouponTemplateMapper couponTemplateMapper;
 
     public OrderViewService(TradeOrderMapper tradeMapper, OrderInfoMapper orderMapper,
                             OrderItemMapper itemMapper, OrderStatusHistoryMapper historyMapper,
@@ -50,6 +69,16 @@ public class OrderViewService {
         this.afterSaleMapper = afterSaleMapper;
     }
 
+    @Autowired(required = false)
+    public void setCouponMappers(CouponRedemptionMapper redemptionMapper,
+                                 CouponRedemptionAllocationMapper allocationMapper,
+                                 UserCouponMapper couponMapper, CouponTemplateMapper couponTemplateMapper) {
+        this.redemptionMapper = redemptionMapper;
+        this.allocationMapper = allocationMapper;
+        this.couponMapper = couponMapper;
+        this.couponTemplateMapper = couponTemplateMapper;
+    }
+
     public TradeDetailView trade(TradeOrder trade) {
         List<OrderSummaryView> orders = orderMapper.selectList(new LambdaQueryWrapper<OrderInfo>()
                         .eq(OrderInfo::getTradeId, trade.getId()).orderByDesc(OrderInfo::getId))
@@ -59,8 +88,9 @@ public class OrderViewService {
             default -> List.of();
         };
         return new TradeDetailView(id(trade.getId()), trade.getTradeNo(), trade.getTradeStatus(),
-                money(trade.getPayableAmount()), address(trade), time(trade.getPayExpireAt()),
-                time(trade.getPaidAt()), time(trade.getCancelledAt()), orders, actions);
+                money(nvl(trade.getGrossAmount(), trade.getPayableAmount())),
+                money(nvl(trade.getCouponDiscountAmount(), BigDecimal.ZERO)), money(trade.getPayableAmount()), address(trade), time(trade.getPayExpireAt()),
+                time(trade.getPaidAt()), time(trade.getCancelledAt()), orders, buyerTradeCoupons(trade.getId()), actions);
     }
 
     public OrderSummaryView summary(OrderInfo order) {
@@ -76,7 +106,8 @@ public class OrderViewService {
         int totalQuantity = items.stream().mapToInt(OrderItem::getQuantity).sum();
         return new OrderSummaryView(id(order.getId()), order.getOrderNo(), id(order.getTradeId()),
                 trade.getTradeNo(), shop(order), order.getOrderStatus(), displayStatus(order),
-                order.getPaymentStatus(), money(order.getPayableAmount()), money(order.getRefundAmount()),
+                order.getPaymentStatus(), money(grossAmount(order)),
+                money(nvl(order.getCouponDiscountAmount(), BigDecimal.ZERO)), money(order.getPayableAmount()), money(order.getRefundAmount()),
                 itemSummary, items.size(), totalQuantity, time(order.getCreatedAt()), actions(order));
     }
 
@@ -84,9 +115,21 @@ public class OrderViewService {
         TradeOrder trade = tradeMapper.selectById(order.getTradeId());
         return new OrderDetailView(id(order.getId()), order.getOrderNo(), id(order.getTradeId()),
                 trade.getTradeNo(), shop(order), order.getOrderStatus(), displayStatus(order), order.getPaymentStatus(),
-                money(order.getItemAmount()), money(order.getFreightAmount()), money(order.getPayableAmount()),
+                money(order.getItemAmount()), money(order.getFreightAmount()),
+                money(grossAmount(order)),
+                money(nvl(order.getCouponDiscountAmount(), BigDecimal.ZERO)), money(order.getPayableAmount()),
                 money(order.getRefundAmount()), order.getBuyerRemark(), address(trade), shipping(order),
-                items(order.getId()), history(order.getId()), actions(order));
+                items(order.getId()), history(order.getId()), buyerOrderCoupons(order.getId()), actions(order));
+    }
+
+    public ShopOrderDetailView shopDetail(OrderInfo order) {
+        TradeOrder trade = tradeMapper.selectById(order.getTradeId());
+        return new ShopOrderDetailView(id(order.getId()), order.getOrderNo(), id(order.getTradeId()),
+                trade.getTradeNo(), shop(order), order.getOrderStatus(), displayStatus(order), order.getPaymentStatus(),
+                money(order.getItemAmount()), money(order.getFreightAmount()), money(grossAmount(order)),
+                money(nvl(order.getCouponDiscountAmount(), BigDecimal.ZERO)), money(order.getPayableAmount()),
+                money(order.getRefundAmount()), order.getBuyerRemark(), address(trade), shipping(order),
+                items(order.getId()), history(order.getId()), shopOrderCoupons(order.getId()), actions(order));
     }
 
     public ShopSummary shop(OrderInfo order) {
@@ -122,7 +165,8 @@ public class OrderViewService {
         return new OrderItemView(id(item.getId()), id(item.getSpuId()), id(item.getSkuId()),
                 item.getSpuNo(), item.getSkuNo(), item.getProductName(), item.getSkuName(), item.getSpecJson(),
                 item.getImageUrl(), money(item.getUnitPrice()), item.getQuantity(), money(item.getOriginalAmount()),
-                money(item.getFreightAmount()), money(item.getPayableAmount()), item.getRefundedQuantity(),
+                money(item.getFreightAmount()), money(nvl(item.getCouponDiscountAmount(), BigDecimal.ZERO)),
+                money(item.getPayableAmount()), item.getRefundedQuantity(),
                 money(item.getRefundedAmount()), item.getReservationStatus());
     }
 
@@ -148,5 +192,86 @@ public class OrderViewService {
     private AddressSnapshot address(TradeOrder trade) {
         return new AddressSnapshot(trade.getRecipientName(), trade.getRecipientPhone(),
                 trade.getProvinceName(), trade.getCityName(), trade.getDistrictName(), trade.getDetailAddress());
+    }
+
+    private BigDecimal nvl(BigDecimal value, BigDecimal fallback) {
+        return value == null ? fallback : value;
+    }
+
+    private BigDecimal grossAmount(OrderInfo order) {
+        if (order.getItemAmount() == null || order.getFreightAmount() == null) {
+            return order.getPayableAmount();
+        }
+        return order.getItemAmount().add(order.getFreightAmount());
+    }
+
+    private List<BuyerAppliedCouponView> buyerTradeCoupons(long tradeId) {
+        if (redemptionMapper == null) return List.of();
+        return redemptionMapper.selectList(new LambdaQueryWrapper<Redemption>()
+                        .eq(Redemption::getTradeId, tradeId).orderByAsc(Redemption::getId))
+                .stream().map(this::buyerCoupon).toList();
+    }
+
+    private List<BuyerAppliedCouponView> buyerOrderCoupons(long orderId) {
+        return orderCouponAmounts(orderId).entrySet().stream()
+                .map(entry -> buyerCoupon(entry.getKey(), entry.getValue())).toList();
+    }
+
+    private List<OrderAppliedCouponView> shopOrderCoupons(long orderId) {
+        return orderCouponAmounts(orderId).entrySet().stream().map(entry -> {
+            Redemption redemption = entry.getKey();
+            CouponIdentity identity = couponIdentity(redemption);
+            OrderCouponAmounts amounts = entry.getValue();
+            return new OrderAppliedCouponView(id(redemption.getId()), identity.couponNo(), identity.couponName(),
+                    identity.ownerType(), money(amounts.discount()), money(amounts.platform()),
+                    money(amounts.shop()), redemption.getStatus());
+        }).toList();
+    }
+
+    private Map<Redemption, OrderCouponAmounts> orderCouponAmounts(long orderId) {
+        if (redemptionMapper == null || allocationMapper == null) return Map.of();
+        Map<Redemption, OrderCouponAmounts> result = new LinkedHashMap<>();
+        List<RedemptionAllocation> rows = allocationMapper.selectList(
+                new LambdaQueryWrapper<RedemptionAllocation>()
+                        .eq(RedemptionAllocation::getOrderId, orderId)
+                        .orderByAsc(RedemptionAllocation::getRedemptionId)
+                        .orderByAsc(RedemptionAllocation::getId));
+        for (RedemptionAllocation row : rows) {
+            Redemption redemption = redemptionMapper.selectById(row.getRedemptionId());
+            if (redemption == null) continue;
+            result.merge(redemption, new OrderCouponAmounts(row.getDiscountAmount(),
+                            row.getPlatformFundedAmount(), row.getShopFundedAmount()),
+                    OrderCouponAmounts::add);
+        }
+        return result;
+    }
+
+    private BuyerAppliedCouponView buyerCoupon(Redemption redemption) {
+        return buyerCoupon(redemption, new OrderCouponAmounts(redemption.getDiscountAmount(),
+                redemption.getPlatformFundedAmount(), redemption.getShopFundedAmount()));
+    }
+
+    private BuyerAppliedCouponView buyerCoupon(Redemption redemption, OrderCouponAmounts amounts) {
+        CouponIdentity identity = couponIdentity(redemption);
+        return new BuyerAppliedCouponView(id(redemption.getId()), identity.couponNo(), identity.couponName(),
+                identity.ownerType(), money(amounts.discount()), redemption.getStatus());
+    }
+
+    private CouponIdentity couponIdentity(Redemption redemption) {
+        UserCoupon coupon = couponMapper == null ? null : couponMapper.selectById(redemption.getUserCouponId());
+        CouponTemplate template = couponTemplateMapper == null ? null
+                : couponTemplateMapper.selectById(redemption.getTemplateId());
+        return new CouponIdentity(coupon == null ? null : coupon.getCouponNo(),
+                template == null ? null : template.getCouponName(),
+                template == null ? null : template.getOwnerType());
+    }
+
+    private record CouponIdentity(String couponNo, String couponName,
+                                  org.dhu.shiguang_market.common.model.MarketEnums.CouponOwnerType ownerType) { }
+    private record OrderCouponAmounts(BigDecimal discount, BigDecimal platform, BigDecimal shop) {
+        private OrderCouponAmounts add(OrderCouponAmounts other) {
+            return new OrderCouponAmounts(discount.add(other.discount), platform.add(other.platform),
+                    shop.add(other.shop));
+        }
     }
 }

@@ -10,6 +10,7 @@ import org.dhu.shiguang_market.order.dto.OrderDtos.OrderDetailView;
 import org.dhu.shiguang_market.order.dto.OrderDtos.OrderSummaryView;
 import org.dhu.shiguang_market.order.dto.OrderDtos.ShipOrderRequest;
 import org.dhu.shiguang_market.order.dto.OrderDtos.ShopOrderSummaryView;
+import org.dhu.shiguang_market.order.dto.OrderDtos.ShopOrderDetailView;
 import org.dhu.shiguang_market.order.service.OrderService;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -66,12 +67,12 @@ public class OrderController {
     }
 
     @GetMapping("/shops/{shopId}/orders/{orderId}")
-    public ApiResponse<OrderDetailView> shopDetail(@PathVariable long shopId, @PathVariable long orderId) {
+    public ApiResponse<ShopOrderDetailView> shopDetail(@PathVariable long shopId, @PathVariable long orderId) {
         return ApiResponse.success(orderService.shopDetail(shopId, orderId));
     }
 
     @PostMapping("/shops/{shopId}/orders/{orderId}/ship")
-    public ApiResponse<OrderDetailView> ship(@PathVariable long shopId, @PathVariable long orderId,
+    public ApiResponse<ShopOrderDetailView> ship(@PathVariable long shopId, @PathVariable long orderId,
                                               @Valid @RequestBody ShipOrderRequest request) {
         return ApiResponse.success(orderService.ship(shopId, orderId, request));
     }

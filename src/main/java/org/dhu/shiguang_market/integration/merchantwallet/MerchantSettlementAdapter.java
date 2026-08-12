@@ -15,6 +15,9 @@ import org.dhu.shiguang_market.common.model.MarketEnums.MerchantTransactionDirec
 import org.dhu.shiguang_market.common.model.MarketEnums.MerchantWalletBucket;
 import org.dhu.shiguang_market.common.model.MarketEnums.MerchantWalletTransactionType;
 import org.dhu.shiguang_market.order.model.OrderInfo;
+import org.dhu.shiguang_market.coupon.mapper.CouponRedemptionAllocationMapper;
+import org.dhu.shiguang_market.coupon.model.CouponModels.RedemptionAllocation;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,12 +27,15 @@ public class MerchantSettlementAdapter implements MerchantSettlementPort {
     private final ShopSettlementMapper settlementMapper;
     private final NumberGenerator numbers;
     private final MerchantWalletTransactionMapper transactionMapper;
+    private final CouponRedemptionAllocationMapper couponAllocations;
 
     public MerchantSettlementAdapter(MerchantWalletAccountMapper walletMapper,
                                      ShopSettlementMapper settlementMapper, NumberGenerator numbers,
-                                     MerchantWalletTransactionMapper transactionMapper) {
+                                     MerchantWalletTransactionMapper transactionMapper,
+                                     CouponRedemptionAllocationMapper couponAllocations) {
         this.walletMapper = walletMapper; this.settlementMapper = settlementMapper; this.numbers = numbers;
         this.transactionMapper = transactionMapper;
+        this.couponAllocations = couponAllocations;
     }
 
     @Override
@@ -38,10 +44,14 @@ public class MerchantSettlementAdapter implements MerchantSettlementPort {
         walletMapper.ensureByShopId(order.getShopId());
         MerchantWalletAccount wallet = walletMapper.selectByShopIdForUpdate(order.getShopId());
         if (settlementMapper.selectByOrderAndShopForUpdate(order.getId(), order.getShopId()) != null) return;
-        BigDecimal commission = grossAmount.multiply(BigDecimal.ZERO).setScale(2);
+        BigDecimal buyerPaid = order.getPayableAmount();
+        BigDecimal platformSubsidy = sumCouponAmount(order.getId(), true);
+        BigDecimal shopDiscount = sumCouponAmount(order.getId(), false);
+        BigDecimal receivableGross = buyerPaid.add(platformSubsidy);
+        BigDecimal commission = receivableGross.multiply(BigDecimal.ZERO).setScale(2);
         BigDecimal pendingBefore = wallet.getPendingBalance();
-        wallet.setPendingBalance(wallet.getPendingBalance().add(grossAmount.subtract(commission))); wallet.setLifetimeGrossIncome(wallet.getLifetimeGrossIncome().add(grossAmount)); wallet.setLifetimeCommission(wallet.getLifetimeCommission().add(commission)); walletMapper.updateById(wallet);
-        ShopSettlement settlement = new ShopSettlement(); settlement.setSettlementNo(numbers.next("ST")); settlement.setShopId(order.getShopId()); settlement.setWalletId(wallet.getId()); settlement.setTradeId(order.getTradeId()); settlement.setOrderId(order.getId()); settlement.setStatus(SettlementStatus.PENDING); settlement.setGrossAmount(grossAmount); settlement.setCommissionRate(BigDecimal.ZERO.setScale(4)); settlement.setCommissionRefundable(true); settlement.setCommissionAmount(commission); settlement.setBuyerRefundAmount(BigDecimal.ZERO.setScale(2)); settlement.setCommissionRefundAmount(BigDecimal.ZERO.setScale(2)); settlement.setMerchantRefundAmount(BigDecimal.ZERO.setScale(2)); settlement.setNetAmount(grossAmount.subtract(commission)); settlement.setPendingAmount(grossAmount.subtract(commission)); settlement.setReleasedAmount(BigDecimal.ZERO.setScale(2)); settlement.setAvailableAt(null); settlementMapper.insert(settlement);
+        wallet.setPendingBalance(wallet.getPendingBalance().add(receivableGross.subtract(commission))); wallet.setLifetimeGrossIncome(wallet.getLifetimeGrossIncome().add(receivableGross)); wallet.setLifetimeCommission(wallet.getLifetimeCommission().add(commission)); walletMapper.updateById(wallet);
+        ShopSettlement settlement = new ShopSettlement(); settlement.setSettlementNo(numbers.next("ST")); settlement.setShopId(order.getShopId()); settlement.setWalletId(wallet.getId()); settlement.setTradeId(order.getTradeId()); settlement.setOrderId(order.getId()); settlement.setStatus(SettlementStatus.PENDING); settlement.setGrossAmount(receivableGross); settlement.setBuyerPaidAmount(buyerPaid); settlement.setPlatformCouponSubsidyAmount(platformSubsidy); settlement.setShopCouponDiscountAmount(shopDiscount); settlement.setCommissionRate(BigDecimal.ZERO.setScale(4)); settlement.setCommissionRefundable(true); settlement.setCommissionAmount(commission); settlement.setBuyerRefundAmount(BigDecimal.ZERO.setScale(2)); settlement.setPlatformSubsidyRefundAmount(BigDecimal.ZERO.setScale(2)); settlement.setCommissionRefundAmount(BigDecimal.ZERO.setScale(2)); settlement.setMerchantRefundAmount(BigDecimal.ZERO.setScale(2)); settlement.setNetAmount(receivableGross.subtract(commission)); settlement.setPendingAmount(receivableGross.subtract(commission)); settlement.setReleasedAmount(BigDecimal.ZERO.setScale(2)); settlement.setAvailableAt(null); settlementMapper.insert(settlement);
         MerchantWalletTransaction tx = new MerchantWalletTransaction();
         tx.setTransactionNo(numbers.next("MWT")); tx.setWalletId(wallet.getId()); tx.setShopId(wallet.getShopId()); tx.setTransactionType(MerchantWalletTransactionType.ORDER_PENDING_CREDIT); tx.setDirection(MerchantTransactionDirection.CREDIT); tx.setTargetBucket(MerchantWalletBucket.PENDING); tx.setAmount(settlement.getNetAmount()); tx.setPendingBefore(pendingBefore); tx.setPendingAfter(wallet.getPendingBalance()); tx.setAvailableBefore(wallet.getAvailableBalance()); tx.setAvailableAfter(wallet.getAvailableBalance()); tx.setFrozenBefore(wallet.getFrozenBalance()); tx.setFrozenAfter(wallet.getFrozenBalance()); tx.setBusinessType("ORDER_SETTLEMENT"); tx.setBusinessNo(settlement.getSettlementNo()); tx.setSettlementId(settlement.getId()); tx.setOrderId(order.getId()); tx.setRemark("支付成功，进入待结算余额"); transactionMapper.insert(tx);
     }
@@ -57,8 +67,24 @@ public class MerchantSettlementAdapter implements MerchantSettlementPort {
     @Override
     @Transactional
     public boolean recordMerchantRefund(OrderInfo order, BigDecimal amount, String refundNo, long operatorId) {
+        return recordMerchantRefund(order, amount, BigDecimal.ZERO.setScale(2), refundNo, operatorId);
+    }
+
+    @Override
+    @Transactional
+    public boolean recordMerchantRefund(OrderInfo order, BigDecimal buyerRefundAmount,
+                                        BigDecimal platformSubsidyReversal, String refundNo,
+                                        long operatorId) {
         ShopSettlement settlement = settlementMapper.selectByOrderAndShopForUpdate(order.getId(), order.getShopId());
-        if (settlement == null || amount == null || amount.signum() <= 0) return true;
+        boolean alreadyRecorded = transactionMapper.selectCount(
+                new LambdaQueryWrapper<MerchantWalletTransaction>()
+                        .eq(MerchantWalletTransaction::getBusinessType, "AFTER_SALE_MERCHANT_REFUND")
+                        .and(query -> query.eq(MerchantWalletTransaction::getBusinessNo, refundNo + "-PENDING")
+                                .or().eq(MerchantWalletTransaction::getBusinessNo, refundNo + "-AVAILABLE"))) > 0;
+        if (alreadyRecorded) return true;
+        BigDecimal commissionRefund = BigDecimal.ZERO.setScale(2);
+        BigDecimal amount = buyerRefundAmount.add(platformSubsidyReversal).subtract(commissionRefund);
+        if (settlement == null || amount.signum() <= 0) return true;
         MerchantWalletAccount wallet = walletMapper.selectByShopIdForUpdate(order.getShopId());
         if (wallet == null || wallet.getStatus() != MerchantWalletStatus.ACTIVE) return false;
         BigDecimal remaining = amount.setScale(2);
@@ -89,7 +115,10 @@ public class MerchantSettlementAdapter implements MerchantSettlementPort {
                     remaining, "AFTER_SALE_MERCHANT_REFUND", refundNo + "-AVAILABLE", operatorId,
                     "售后退款冲回可用收入");
         }
-        settlement.setBuyerRefundAmount(nz(settlement.getBuyerRefundAmount()).add(amount));
+        settlement.setBuyerRefundAmount(nz(settlement.getBuyerRefundAmount()).add(buyerRefundAmount));
+        settlement.setPlatformSubsidyRefundAmount(nz(settlement.getPlatformSubsidyRefundAmount())
+                .add(platformSubsidyReversal));
+        settlement.setCommissionRefundAmount(nz(settlement.getCommissionRefundAmount()).add(commissionRefund));
         settlement.setMerchantRefundAmount(nz(settlement.getMerchantRefundAmount()).add(amount));
         settlement.setPendingAmount(nz(settlement.getPendingAmount()).subtract(pendingDebit));
         settlement.setReleasedAmount(settlementReleased.subtract(amount.subtract(pendingDebit)));
@@ -99,6 +128,13 @@ public class MerchantSettlementAdapter implements MerchantSettlementPort {
         }
         settlementMapper.updateById(settlement);
         return true;
+    }
+
+    private BigDecimal sumCouponAmount(long orderId, boolean platform) {
+        return couponAllocations.selectList(new LambdaQueryWrapper<RedemptionAllocation>()
+                        .eq(RedemptionAllocation::getOrderId, orderId))
+                .stream().map(value -> platform ? value.getPlatformFundedAmount() : value.getShopFundedAmount())
+                .reduce(BigDecimal.ZERO.setScale(2), BigDecimal::add);
     }
 
     private void move(MerchantWalletAccount wallet, ShopSettlement settlement,

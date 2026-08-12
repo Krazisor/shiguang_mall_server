@@ -41,6 +41,8 @@ import org.dhu.shiguang_market.product.model.ProductSku;
 import org.dhu.shiguang_market.product.model.ProductSpu;
 import org.dhu.shiguang_market.shop.mapper.ShopMapper;
 import org.dhu.shiguang_market.shop.model.Shop;
+import org.dhu.shiguang_market.coupon.service.CouponQuoteService;
+import org.dhu.shiguang_market.coupon.service.CouponQuoteService.QuoteResult;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -53,6 +55,7 @@ public class CartService {
     private final ShopMapper shopMapper;
     private final AddressService addressService;
     private final CurrentUserService currentUser;
+    private CouponQuoteService couponQuotes;
 
     public CartService(CartItemMapper cartMapper, ProductSkuMapper skuMapper,
                        ProductSpuMapper spuMapper, InventoryStockMapper stockMapper,
@@ -65,6 +68,11 @@ public class CartService {
         this.shopMapper = shopMapper;
         this.addressService = addressService;
         this.currentUser = currentUser;
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public void setCouponQuotes(CouponQuoteService couponQuotes) {
+        this.couponQuotes = couponQuotes;
     }
 
     public CartView view() {
@@ -195,27 +203,39 @@ public class CartService {
         UserAddress address = addressService.ownedEntity(parseNullableId(request.addressId()), userId);
         List<CartItem> items = resolveItems(userId, request.cartItemIds());
         List<CheckoutLine> lines = items.stream().map(this::checkoutLine).toList();
+        QuoteResult quote = couponQuotes == null ? null : couponQuotes.quote(userId, lines, request.couponSelection());
+        Map<Long, Long> discounts = quote == null || quote.result() == null
+                ? Map.of() : quote.result().lineDiscounts();
         Map<Long, List<CheckoutLine>> grouped = lines.stream()
                 .filter(line -> line.shop() != null)
                 .collect(Collectors.groupingBy(line -> line.shop().getId(), LinkedHashMap::new, Collectors.toList()));
         List<CheckoutShopGroupView> shopGroups = grouped.entrySet().stream().map(entry -> {
-            List<CheckoutItemView> views = entry.getValue().stream().map(CheckoutLine::view).toList();
+            List<CheckoutItemView> views = entry.getValue().stream().map(line -> discounted(line,
+                    discounts.getOrDefault(line.cart().getId(), 0L))).toList();
             BigDecimal amount = entry.getValue().stream().filter(CheckoutLine::valid)
                     .map(CheckoutLine::amount).reduce(BigDecimal.ZERO, BigDecimal::add);
             String remark = request.shopRemarks() == null ? null : request.shopRemarks().get(entry.getKey().toString());
             if (remark != null && remark.length() > 500) {
                 throw BusinessException.badRequest("VALIDATION_FAILED", "店铺备注最多 500 字");
             }
+            BigDecimal shopDiscount = entry.getValue().stream()
+                    .map(line -> BigDecimal.valueOf(discounts.getOrDefault(line.cart().getId(), 0L), 2))
+                    .reduce(BigDecimal.ZERO, BigDecimal::add);
             return new CheckoutShopGroupView(IdentityViewMapper.shop(entry.getValue().getFirst().shop()),
-                    views, money(amount), "0.00", money(amount), remark);
+                    views, money(amount), "0.00", money(amount.subtract(shopDiscount)),
+                    money(shopDiscount), remark);
         }).toList();
         List<InvalidCheckoutItemView> invalid = lines.stream().filter(line -> !line.valid())
                 .map(line -> new InvalidCheckoutItemView(id(line.cart().getId()), id(line.cart().getSkuId()),
                         line.reason(), line.message())).toList();
         BigDecimal total = lines.stream().filter(CheckoutLine::valid).map(CheckoutLine::amount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal discount = quote == null || quote.result() == null ? BigDecimal.ZERO
+                : BigDecimal.valueOf(quote.result().totalDiscountCents(), 2);
         return new CheckoutPreviewView(address == null ? null : IdentityViewMapper.address(address),
-                shopGroups, money(total), "0.00", money(total), !lines.isEmpty() && invalid.isEmpty(), invalid);
+                shopGroups, money(total), "0.00", money(total.subtract(discount)), money(total),
+                money(discount), quote == null ? null : quote.view(),
+                !lines.isEmpty() && invalid.isEmpty() && (quote == null || quote.submittable()), invalid);
     }
 
     public List<CartItem> resolveItems(long userId, List<String> requestedIds) {
@@ -271,6 +291,14 @@ public class CartService {
                 sku == null ? "0.00" : money(sku.getSalePrice()), cart.getQuantity(), money(amount),
                 "0.00", money(amount), reason == null, reason);
         return new CheckoutLine(cart, sku, spu, shop, stock, view, amount, reason == null, reason, message);
+    }
+
+    private CheckoutItemView discounted(CheckoutLine line, long cents) {
+        CheckoutItemView value = line.view();
+        BigDecimal discount = BigDecimal.valueOf(cents, 2);
+        return new CheckoutItemView(value.cartItemId(), value.skuId(), value.productName(), value.skuName(),
+                value.unitPrice(), value.quantity(), value.originalAmount(), value.freightAmount(),
+                money(line.amount().subtract(discount)), money(discount), value.valid(), value.invalidReason());
     }
 
     private CartItemView itemView(CartItem cart) {
