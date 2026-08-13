@@ -284,9 +284,22 @@ multipart 请求中的文件本身不是 JSON DTO；上传成功后的统一响�
 
 平台运营列表中的联系方式均按接口文档脱敏。`BusinessTraceView` 只提供关联摘要，前端需要详情时再调用对应受权限保护的详情接口。
 
-## 13. DTO 变更检查
+## 13. 周期抢券
 
-### 13.1 常用字段校验矩阵
+| DTO | 字段与约束 |
+| --- | --- |
+| `RecurringCouponSchedule` | `recurrenceType:Enum<DAILY,WEEKLY,MONTHLY>`、`weekdays:integer[]\|null`、`monthDays:integer[]\|null`、`dailyStartsAt:string`、`windowDurationMinutes:int`、`recurrenceStartsAt:Timestamp`、`recurrenceEndsAt:Timestamp`、`timezone:string`；星期使用 ISO `1..7`，月日使用 `1..31`，数组去重升序；每天不提交日期数组，每周只提交 `weekdays`，每月只提交 `monthDays`；时间格式 `HH:mm:ss` 且秒为 `00`；窗口 `1..1440` 分钟；周期最长 366 天；时区固定 `Asia/Shanghai` |
+| `CreateRecurringCouponActivityRequest` | `activityName:string`、`subtitle?:string\|null`、`bannerUrl?:string\|null`、`recurrence:RecurringCouponSchedule`；名称 `1..128`，副标题最大 255，横幅最大 1024；不接受活动类型、归属、状态、版本或活动起止时间 |
+| `UpdateCouponActivityScheduleRequest` | `scheduleType:Enum<RECURRING>`、`recurrence:RecurringCouponSchedule`、`version:int`；PUT 全量替换且只允许草稿周期活动，`version>=0` |
+| `CouponClaimWindowPeriodView` | `startsAt:Timestamp`、`endsAt:Timestamp`，区间语义为左闭右开 |
+| `CouponClaimWindowView` | `status:Enum<WAITING,OPEN,PAUSED,ENDED>`、`currentWindow:CouponClaimWindowPeriodView\|null`、`nextWindow:CouponClaimWindowPeriodView\|null` |
+| `CouponActivityScheduleView` | `scheduleType:Enum<ONCE,RECURRING>`、`campaignStartsAt:Timestamp`、`campaignEndsAt:Timestamp`、`recurrence:RecurringCouponSchedule\|null`、`window:CouponClaimWindowView`、`serverTime:Timestamp`、`version:int` |
+
+现有 `CouponActivityAdminView`、`ClaimableActivitySummaryView`、`ClaimableActivityDetailView` 和 `ClaimableTemplateView` 字段集合保持不变；周期详情只通过 `CouponActivityScheduleView` 返回。
+
+## 14. DTO 变更检查
+
+### 14.1 常用字段校验矩阵
 
 | 字段 | 约束 |
 | --- | --- |
@@ -314,7 +327,7 @@ multipart 请求中的文件本身不是 JSON DTO；上传成功后的统一响�
 
 后端先去除规定字段的首尾空白再做长度校验；保留商品详情 HTML 和买家/审核说明内部的换行。数组超过上限、含重复项或 URL 非法统一返回 `VALIDATION_FAILED`。
 
-### 13.2 变更检查
+### 14.2 变更检查
 
 每次修改 DTO 时必须检查：
 

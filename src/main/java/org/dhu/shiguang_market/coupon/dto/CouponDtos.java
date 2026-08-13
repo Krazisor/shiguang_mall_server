@@ -28,7 +28,10 @@ import org.dhu.shiguang_market.common.model.MarketEnums.CouponFundingType;
 import org.dhu.shiguang_market.common.model.MarketEnums.CouponOwnerType;
 import org.dhu.shiguang_market.common.model.MarketEnums.CouponRedeemCodeStatus;
 import org.dhu.shiguang_market.common.model.MarketEnums.CouponRedemptionStatus;
+import org.dhu.shiguang_market.common.model.MarketEnums.CouponRecurrenceType;
 import org.dhu.shiguang_market.common.model.MarketEnums.CouponRestorePolicy;
+import org.dhu.shiguang_market.common.model.MarketEnums.CouponScheduleType;
+import org.dhu.shiguang_market.common.model.MarketEnums.CouponClaimWindowStatus;
 import org.dhu.shiguang_market.common.model.MarketEnums.CouponScopeType;
 import org.dhu.shiguang_market.common.model.MarketEnums.CouponSelectionMode;
 import org.dhu.shiguang_market.common.model.MarketEnums.CouponStackMode;
@@ -178,6 +181,40 @@ public final class CouponDtos {
             @Size(max = 1024) String bannerUrl, @NotNull CouponActivityType activityType,
             @NotNull OffsetDateTime startsAt, @NotNull OffsetDateTime endsAt,
             @NotNull @Min(0) Integer version) {
+    }
+
+    public record RecurringCouponSchedule(
+            @NotNull CouponRecurrenceType recurrenceType, List<Integer> weekdays, List<Integer> monthDays,
+            @NotBlank String dailyStartsAt, @NotNull @Min(1) @Max(1440) Integer windowDurationMinutes,
+            @NotNull OffsetDateTime recurrenceStartsAt, @NotNull OffsetDateTime recurrenceEndsAt,
+            @NotBlank String timezone) {
+    }
+
+    public record CreateRecurringCouponActivityRequest(
+            @NotBlank @Size(max = 128) String activityName, @Size(max = 255) String subtitle,
+            @Size(max = 1024) String bannerUrl, @Valid @NotNull RecurringCouponSchedule recurrence) {
+    }
+
+    public record UpdateCouponActivityScheduleRequest(
+            @NotNull CouponScheduleType scheduleType, @Valid @NotNull RecurringCouponSchedule recurrence,
+            @NotNull @Min(0) Integer version) {
+    }
+
+    public record CouponClaimWindowPeriodView(OffsetDateTime startsAt, OffsetDateTime endsAt) {
+    }
+
+    public record CouponClaimWindowView(CouponClaimWindowStatus status,
+                                        CouponClaimWindowPeriodView currentWindow,
+                                        CouponClaimWindowPeriodView nextWindow) {
+    }
+
+    public record CouponActivityScheduleView(CouponScheduleType scheduleType,
+                                             OffsetDateTime campaignStartsAt,
+                                             OffsetDateTime campaignEndsAt,
+                                             RecurringCouponSchedule recurrence,
+                                             CouponClaimWindowView window,
+                                             OffsetDateTime serverTime,
+                                             int version) {
     }
 
     public record ScopeRequest(

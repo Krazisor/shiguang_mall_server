@@ -7,6 +7,7 @@ import org.dhu.shiguang_market.common.model.MarketEnums.CouponActivityStatus;
 import org.dhu.shiguang_market.common.model.MarketEnums.CouponActivityType;
 import org.dhu.shiguang_market.coupon.dto.CouponDtos.ClaimableActivityDetailView;
 import org.dhu.shiguang_market.coupon.dto.CouponDtos.ClaimableActivitySummaryView;
+import org.dhu.shiguang_market.coupon.dto.CouponDtos.CouponActivityScheduleView;
 import org.dhu.shiguang_market.coupon.dto.CouponDtos.UserCouponDetailView;
 import org.dhu.shiguang_market.coupon.service.CouponService;
 import org.springframework.http.HttpStatus;
@@ -37,6 +38,10 @@ public class CouponCenterController {
     @GetMapping("/{activityId}")
     public ApiResponse<ClaimableActivityDetailView> detail(@PathVariable long activityId) {
         return ApiResponse.success(service.centerDetail(activityId));
+    }
+    @GetMapping("/{activityId}/schedule")
+    public ApiResponse<CouponActivityScheduleView> schedule(@PathVariable long activityId) {
+        return ApiResponse.success(service.centerSchedule(activityId));
     }
     @PostMapping("/{activityId}/templates/{templateId}/claim")
     public ResponseEntity<ApiResponse<UserCouponDetailView>> claim(@PathVariable long activityId,

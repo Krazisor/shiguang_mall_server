@@ -36,6 +36,7 @@ schema.sql -> schema2.sql -> scheme3.sql -> scheme4.sql
 ```mermaid
 erDiagram
     SHOP o|--o{ COUPON_ACTIVITY : owns
+    COUPON_ACTIVITY ||--o| COUPON_ACTIVITY_RECURRENCE : schedules
     COUPON_ACTIVITY o|--o{ COUPON_TEMPLATE : contains
     SHOP o|--o{ COUPON_TEMPLATE : owns
     COUPON_TEMPLATE ||--o{ COUPON_FUNDING_PARTICIPATION : invites
@@ -66,7 +67,7 @@ erDiagram
     COUPON_TEMPLATE ||--o{ COUPON_OPERATION_LOG : audits
 ```
 
-优惠券新增 15 张表：
+优惠券新增 16 张表：
 
 1. `coupon_activity`
 2. `coupon_template`
@@ -83,8 +84,9 @@ erDiagram
 13. `coupon_refund_allocation`
 14. `coupon_budget_ledger`
 15. `coupon_operation_log`
+16. `coupon_activity_recurrence`
 
-范围关系刻意拆成 4 张，以换取外键和清晰的数据范围。本文后续如称“优惠券表”，均包含这 15 张增量表。
+范围关系刻意拆成 4 张，以换取外键和清晰的数据范围。本文后续如称“优惠券表”，均包含这 16 张增量表。
 
 ## 4. 活动与券模板
 
@@ -102,7 +104,7 @@ erDiagram
 | `activity_name` | `VARCHAR(128)`，非空 | 用户可见名称，trim 后 `1..128` |
 | `subtitle` | `VARCHAR(255)`，可空 | 用户可见副标题 |
 | `banner_url` | `VARCHAR(1024)`，可空 | 活动横幅；遵循图片 URL 安全规则 |
-| `starts_at`、`ends_at` | `DATETIME(3)`，非空 | 活动时间窗 `[starts_at, ends_at)` |
+| `starts_at`、`ends_at` | `DATETIME(3)`，非空 | 一次性活动为唯一窗口；周期活动分别物化第一个有效窗口开始和最后一个有效窗口结束 |
 | `status` | `VARCHAR(20)`，非空，默认 `DRAFT` | `DRAFT`、`SCHEDULED`、`RUNNING`、`PAUSED`、`ENDED`、`CANCELLED` |
 | `pause_source` | `VARCHAR(16)`，可空 | `OWNER` 或 `PLATFORM_GOVERNANCE` |
 | `pause_reason` | `VARCHAR(500)`，可空 | `PAUSED` 时必填 |
@@ -118,7 +120,25 @@ erDiagram
 - `(shop_id, status, starts_at)`、`(owner_type, status, starts_at)` 和 `(status, ends_at)` 建索引。
 - 活动和模板有历史引用后不得物理删除；草稿删除也建议使用 `CANCELLED` 保留操作轨迹。
 
-### 4.2 `coupon_template`
+### 4.2 `coupon_activity_recurrence`
+
+周期规则与活动一对零或一，只有周期活动存在记录；一次性活动仍只使用 `coupon_activity.starts_at/ends_at`。
+
+| 字段 | 类型与空值 | 含义 |
+| --- | --- | --- |
+| `activity_id` | `BIGINT UNSIGNED`，主键、外键 | 关联活动，一项活动最多一条规则 |
+| `recurrence_type` | `VARCHAR(16)`，非空 | `DAILY`、`WEEKLY`、`MONTHLY` |
+| `weekdays_json` | `JSON`，条件可空 | 周规则 ISO 星期数组 `1..7` |
+| `month_days_json` | `JSON`，条件可空 | 月规则日期数组 `1..31` |
+| `daily_starts_at` | `TIME`，非空 | 每个有效日期的开抢时刻，秒固定为 `00` |
+| `window_duration_minutes` | `INT`，非空 | 每场 `1..1440` 分钟 |
+| `recurrence_starts_at`、`recurrence_ends_at` | `DATETIME(3)`，非空 | 周期生效范围，最长 366 天，由应用校验 |
+| `timezone` | `VARCHAR(64)`，非空 | 固定 `Asia/Shanghai` |
+| `created_at`、`updated_at` | `DATETIME(3)`，非空 | 审计时间 |
+
+组合约束要求每天规则的两个数组都为空，每周只允许 `weekdays_json`，每月只允许 `month_days_json`。数组值域、去重、排序、月末缺失日期跳过和至少存在一个完整窗口由应用服务统一校验。迁移位于 `sql/scheme8.sql`。
+
+### 4.3 `coupon_template`
 
 一行代表一组不可分割的经济规则。模板开始发行后只允许修改展示文案、排序和增加总发行量/预算，不允许改变已承诺权益。
 

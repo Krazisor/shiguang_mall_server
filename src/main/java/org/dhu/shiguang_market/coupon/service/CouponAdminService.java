@@ -37,6 +37,7 @@ import org.dhu.shiguang_market.common.service.IdempotencyService;
 import org.dhu.shiguang_market.common.util.Formatters;
 import org.dhu.shiguang_market.common.util.NumberGenerator;
 import org.dhu.shiguang_market.coupon.dto.CouponDtos.CouponActivityAdminView;
+import org.dhu.shiguang_market.coupon.dto.CouponDtos.CouponActivityScheduleView;
 import org.dhu.shiguang_market.coupon.dto.CouponDtos.CouponFundingParticipationView;
 import org.dhu.shiguang_market.coupon.dto.CouponDtos.CouponFundingInvitationBatchView;
 import org.dhu.shiguang_market.coupon.dto.CouponDtos.CouponTemplateAdminDetailView;
@@ -46,11 +47,13 @@ import org.dhu.shiguang_market.coupon.dto.CouponDtos.CouponAdminScopeView;
 import org.dhu.shiguang_market.coupon.dto.CouponDtos.ScopeView;
 import org.dhu.shiguang_market.coupon.dto.CouponDtos.TemplateView;
 import org.dhu.shiguang_market.coupon.dto.CouponDtos.CreateCouponActivityRequest;
+import org.dhu.shiguang_market.coupon.dto.CouponDtos.CreateRecurringCouponActivityRequest;
 import org.dhu.shiguang_market.coupon.dto.CouponDtos.CreateCouponTemplateRequest;
 import org.dhu.shiguang_market.coupon.dto.CouponDtos.DecideCouponFundingRequest;
 import org.dhu.shiguang_market.coupon.dto.CouponDtos.ScopeRequest;
 import org.dhu.shiguang_market.coupon.dto.CouponDtos.SendFundingInvitationRequest;
 import org.dhu.shiguang_market.coupon.dto.CouponDtos.UpdateCouponActivityRequest;
+import org.dhu.shiguang_market.coupon.dto.CouponDtos.UpdateCouponActivityScheduleRequest;
 import org.dhu.shiguang_market.coupon.dto.CouponDtos.UpdateCouponPresentationRequest;
 import org.dhu.shiguang_market.coupon.dto.CouponDtos.CopyCouponTemplateRequest;
 import org.dhu.shiguang_market.coupon.mapper.CouponActivityMapper;
@@ -95,6 +98,7 @@ public class CouponAdminService {
     private final NumberGenerator numbers;
     private final CouponViewMapper views;
     private final CouponAuditService audit;
+    private final CouponScheduleService schedules;
 
     public CouponAdminService(CouponActivityMapper activityMapper, CouponTemplateMapper templateMapper,
                               CouponScopeMappers.Shop shopScopeMapper, CouponScopeMappers.Category categoryScopeMapper,
@@ -103,7 +107,8 @@ public class CouponAdminService {
                               ProductCategoryMapper categoryMapper, ProductSpuMapper spuMapper,
                               ProductSkuMapper skuMapper, CurrentUserService currentUser,
                               ShopAccessService shopAccess, IdempotencyService idempotency,
-                              NumberGenerator numbers, CouponViewMapper views, CouponAuditService audit) {
+                              NumberGenerator numbers, CouponViewMapper views, CouponAuditService audit,
+                              CouponScheduleService schedules) {
         this.activityMapper = activityMapper;
         this.templateMapper = templateMapper;
         this.shopScopeMapper = shopScopeMapper;
@@ -121,6 +126,7 @@ public class CouponAdminService {
         this.numbers = numbers;
         this.views = views;
         this.audit = audit;
+        this.schedules = schedules;
     }
 
     public PageView<CouponActivityAdminView> activities(Long shopId, CouponActivityStatus status,
@@ -185,18 +191,88 @@ public class CouponAdminService {
     }
 
     @Transactional
+    public CouponActivityAdminView createRecurringActivity(Long shopId,
+                                                            CreateRecurringCouponActivityRequest request,
+                                                            String key) {
+        long operator = authorize(shopId, true);
+        String path = activityPath(shopId) + "/recurring";
+        return idempotency.execute(operator, "POST", path, key, request, CouponActivityAdminView.class, () -> {
+            var bounds = schedules.validate(request.recurrence());
+            CouponActivity activity = new CouponActivity();
+            activity.setActivityNo(numbers.next("CA"));
+            activity.setOwnerType(shopId == null ? CouponOwnerType.PLATFORM : CouponOwnerType.SHOP);
+            activity.setShopId(shopId);
+            activity.setActivityType(CouponActivityType.FLASH_CLAIM);
+            activity.setActivityName(request.activityName().trim());
+            activity.setSubtitle(Formatters.trimToNull(request.subtitle()));
+            activity.setBannerUrl(Formatters.trimToNull(request.bannerUrl()));
+            activity.setStartsAt(bounds.startsAt().toLocalDateTime());
+            activity.setEndsAt(bounds.endsAt().toLocalDateTime());
+            activity.setStatus(CouponActivityStatus.DRAFT);
+            activity.setCreatedBy(operator);
+            activity.setUpdatedBy(operator);
+            activity.setVersion(0);
+            activityMapper.insert(activity);
+            schedules.create(activity.getId(), request.recurrence());
+            audit("ACTIVITY", activity.getId(), "CREATE_RECURRING", shopId, operator,
+                    null, activity.getStatus().name(), java.util.Map.of("scheduleType", "RECURRING"), null);
+            return activityView(activity);
+        });
+    }
+
+    public CouponActivityScheduleView activitySchedule(Long shopId, long id) {
+        authorize(shopId, false);
+        return schedules.view(activityRecord(shopId, id));
+    }
+
+    @Transactional
+    public CouponActivityScheduleView updateActivitySchedule(Long shopId, long id,
+                                                              UpdateCouponActivityScheduleRequest request) {
+        long operator = authorize(shopId, true);
+        CouponActivity activity = activityRecord(shopId, id);
+        version(activity.getVersion(), request.version());
+        if (activity.getStatus() != CouponActivityStatus.DRAFT
+                || activity.getActivityType() != CouponActivityType.FLASH_CLAIM
+                || !schedules.isRecurring(id)
+                || request.scheduleType() != org.dhu.shiguang_market.common.model.MarketEnums.CouponScheduleType.RECURRING) {
+            state("COUPON_ACTIVITY_STATE_CONFLICT");
+        }
+        var bounds = schedules.validate(request.recurrence());
+        var before = schedules.recurrence(id);
+        int beforeVersion = nvl(activity.getVersion());
+        activity.setStartsAt(bounds.startsAt().toLocalDateTime());
+        activity.setEndsAt(bounds.endsAt().toLocalDateTime());
+        activity.setUpdatedBy(operator);
+        if (activityMapper.updateById(activity) != 1) versionConflict();
+        schedules.replace(id, request.recurrence());
+        audit("ACTIVITY", id, "UPDATE_SCHEDULE", shopId, operator,
+                activity.getStatus().name(), activity.getStatus().name(),
+                java.util.Map.of("beforeSchedule", before, "afterSchedule", request.recurrence(),
+                        "beforeVersion", beforeVersion, "afterVersion", nvl(activity.getVersion())), null);
+        return schedules.view(activityMapper.selectById(id));
+    }
+
+    @Transactional
     public CouponActivityAdminView updateActivity(Long shopId, long id, UpdateCouponActivityRequest request) {
         long operator = authorize(shopId, true);
         CouponActivity a = activityRecord(shopId, id);
         version(a.getVersion(), request.version());
         if (a.getStatus() != CouponActivityStatus.DRAFT) state("COUPON_ACTIVITY_STATE_CONFLICT");
+        boolean recurring = schedules.isRecurring(id);
+        if (recurring && (request.activityType() != a.getActivityType()
+                || !request.startsAt().toLocalDateTime().equals(a.getStartsAt())
+                || !request.endsAt().toLocalDateTime().equals(a.getEndsAt()))) {
+            state("COUPON_ACTIVITY_STATE_CONFLICT");
+        }
         validateTime(request.startsAt().toLocalDateTime(), request.endsAt().toLocalDateTime());
         a.setActivityName(request.activityName().trim());
         a.setSubtitle(Formatters.trimToNull(request.subtitle()));
         a.setBannerUrl(Formatters.trimToNull(request.bannerUrl()));
-        a.setActivityType(request.activityType());
-        a.setStartsAt(request.startsAt().toLocalDateTime());
-        a.setEndsAt(request.endsAt().toLocalDateTime());
+        if (!recurring) {
+            a.setActivityType(request.activityType());
+            a.setStartsAt(request.startsAt().toLocalDateTime());
+            a.setEndsAt(request.endsAt().toLocalDateTime());
+        }
         a.setUpdatedBy(operator);
         if (activityMapper.updateById(a) != 1) versionConflict();
         audit("ACTIVITY", id, "UPDATE", shopId, operator, null, a.getStatus().name(),
@@ -219,7 +295,10 @@ public class CouponAdminService {
                         from == CouponActivityStatus.DRAFT ? (LocalDateTime.now().isBefore(a.getStartsAt()) ? CouponActivityStatus.SCHEDULED : CouponActivityStatus.RUNNING) : null;
                 case "pause" -> from == CouponActivityStatus.RUNNING ? CouponActivityStatus.PAUSED : null;
                 case "resume" ->
-                        from == CouponActivityStatus.PAUSED ? (LocalDateTime.now().isBefore(a.getEndsAt()) ? CouponActivityStatus.RUNNING : CouponActivityStatus.ENDED) : null;
+                        from == CouponActivityStatus.PAUSED
+                                ? (!LocalDateTime.now().isBefore(a.getEndsAt()) ? CouponActivityStatus.ENDED
+                                : LocalDateTime.now().isBefore(a.getStartsAt())
+                                ? CouponActivityStatus.SCHEDULED : CouponActivityStatus.RUNNING) : null;
                 case "end" ->
                         Set.of(CouponActivityStatus.SCHEDULED, CouponActivityStatus.RUNNING, CouponActivityStatus.PAUSED).contains(from) ? CouponActivityStatus.ENDED : null;
                 case "cancel" ->
@@ -753,9 +832,17 @@ public class CouponAdminService {
                 && activity.getActivityType() != CouponActivityType.NEW_USER_WELCOME) {
             templateInvalid("系统新客券只能关联新用户欢迎活动");
         }
-        if (template.getClaimStartsAt() != null && (template.getClaimStartsAt().isBefore(activity.getStartsAt())
-                || template.getClaimEndsAt().isAfter(activity.getEndsAt()))) {
-            templateInvalid("模板领取窗必须位于活动时间窗内");
+        if (template.getClaimStartsAt() != null) {
+            boolean invalidWindow = schedules.isRecurring(activity.getId())
+                    ? template.getClaimStartsAt().isAfter(activity.getStartsAt())
+                    || template.getClaimEndsAt().isBefore(activity.getEndsAt())
+                    : template.getClaimStartsAt().isBefore(activity.getStartsAt())
+                    || template.getClaimEndsAt().isAfter(activity.getEndsAt());
+            if (invalidWindow) {
+                templateInvalid(schedules.isRecurring(activity.getId())
+                        ? "周期活动模板领取窗必须覆盖整个活动生命周期"
+                        : "模板领取窗必须位于活动时间窗内");
+            }
         }
     }
 
@@ -791,9 +878,25 @@ public class CouponAdminService {
         if (templates.isEmpty()) {
             throw BusinessException.unprocessable("COUPON_TEMPLATE_INVALID", "活动至少需要关联一张优惠券模板");
         }
+        boolean recurring = schedules.isRecurring(activity.getId());
+        if (activity.getActivityType() == CouponActivityType.FLASH_CLAIM && recurring) {
+            var recurrence = schedules.recurrence(activity.getId());
+            var bounds = recurrence == null ? null : schedules.validate(recurrence);
+            if (bounds == null || !bounds.startsAt().toLocalDateTime().equals(activity.getStartsAt())
+                    || !bounds.endsAt().toLocalDateTime().equals(activity.getEndsAt())) {
+                throw BusinessException.unprocessable("COUPON_TEMPLATE_INVALID", "周期规则与活动生命周期不一致");
+            }
+        }
         for (CouponTemplate template : templates) {
             if (template.getStatus() != CouponTemplateStatus.ACTIVE) {
                 throw BusinessException.unprocessable("COUPON_TEMPLATE_INVALID", "活动关联模板必须先激活");
+            }
+            if (recurring && (template.getDistributionType() != CouponDistributionType.FLASH_CLAIM
+                    || template.getClaimStartsAt() == null || template.getClaimEndsAt() == null
+                    || template.getClaimStartsAt().isAfter(activity.getStartsAt())
+                    || template.getClaimEndsAt().isBefore(activity.getEndsAt()))) {
+                throw BusinessException.unprocessable("COUPON_TEMPLATE_INVALID",
+                        "周期抢券活动只能关联领取窗覆盖活动生命周期的限时抢券模板");
             }
         }
     }

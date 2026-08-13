@@ -9,6 +9,8 @@ import com.baomidou.mybatisplus.annotation.Version;
 import com.baomidou.mybatisplus.extension.handlers.Jackson3TypeHandler;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.util.List;
 import java.util.Map;
 import lombok.Data;
 import org.dhu.shiguang_market.common.model.MarketEnums.CouponActivityStatus;
@@ -19,6 +21,7 @@ import org.dhu.shiguang_market.common.model.MarketEnums.CouponFundingParticipati
 import org.dhu.shiguang_market.common.model.MarketEnums.CouponFundingType;
 import org.dhu.shiguang_market.common.model.MarketEnums.CouponOwnerType;
 import org.dhu.shiguang_market.common.model.MarketEnums.CouponRedeemCodeStatus;
+import org.dhu.shiguang_market.common.model.MarketEnums.CouponRecurrenceType;
 import org.dhu.shiguang_market.common.model.MarketEnums.CouponRedemptionStatus;
 import org.dhu.shiguang_market.common.model.MarketEnums.CouponRestorePolicy;
 import org.dhu.shiguang_market.common.model.MarketEnums.CouponScopeType;
@@ -52,6 +55,24 @@ public final class CouponModels {
         private Long createdBy;
         private Long updatedBy;
         @Version private Integer version;
+        private LocalDateTime createdAt;
+        private LocalDateTime updatedAt;
+    }
+
+    @Data
+    @TableName(value = "coupon_activity_recurrence", autoResultMap = true)
+    public static class CouponActivityRecurrence {
+        @TableId private Long activityId;
+        private CouponRecurrenceType recurrenceType;
+        @TableField(typeHandler = Jackson3TypeHandler.class, updateStrategy = FieldStrategy.ALWAYS)
+        private List<Integer> weekdaysJson;
+        @TableField(typeHandler = Jackson3TypeHandler.class, updateStrategy = FieldStrategy.ALWAYS)
+        private List<Integer> monthDaysJson;
+        private LocalTime dailyStartsAt;
+        private Integer windowDurationMinutes;
+        private LocalDateTime recurrenceStartsAt;
+        private LocalDateTime recurrenceEndsAt;
+        private String timezone;
         private LocalDateTime createdAt;
         private LocalDateTime updatedAt;
     }

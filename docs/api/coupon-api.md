@@ -100,6 +100,7 @@
 | --- | --- | --- | --- | --- | --- |
 | GET | `/api/coupon-center/activities` | LOGIN + `coupon:read:self` | 否 | `activityType,shopId,status,page,pageSize,sort` | `Page<ClaimableActivitySummaryView>` |
 | GET | `/api/coupon-center/activities/{activityId}` | LOGIN + `coupon:read:self` | 否 | 无 | `ClaimableActivityDetailView` |
+| GET | `/api/coupon-center/activities/{activityId}/schedule` | LOGIN + `coupon:read:self` | 否 | 无 | `CouponActivityScheduleView` |
 | POST | `/api/coupon-center/activities/{activityId}/templates/{templateId}/claim` | LOGIN + `coupon:claim` | 必填 | 无 | `UserCouponDetailView`，`201` |
 
 买家列表只返回当前可展示的 `SCHEDULED`、`RUNNING`、`PAUSED` 活动；默认排序 `startsAt,asc`，追加 `id,asc`。`status` 买家侧只允许上述三个值。
@@ -179,7 +180,13 @@
 
 `unclaimableReason`：`null` 或 `NOT_STARTED`、`ACTIVITY_PAUSED`、`ACTIVITY_ENDED`、`SOLD_OUT`、`USER_LIMIT_REACHED`、`AUDIENCE_NOT_ELIGIBLE`、`ACCOUNT_UNAVAILABLE`。
 
-### 5.4 领取
+周期抢券活动在首场前或两个场次之间继续使用 `NOT_STARTED`。活动详情需要当前和下一周期窗口时调用 schedule 子资源；现有领券中心活动和模板 DTO 不增加周期字段。
+
+### 5.4 周期窗口查询
+
+schedule 子资源对一次性活动返回 `scheduleType=ONCE`、`recurrence=null`，对周期活动返回结构化规则及当前/下一窗口。`window.status` 为 `WAITING`、`OPEN`、`PAUSED` 或 `ENDED`。买家入口沿用活动详情可见性和模板存在性判断，不扩大活动数据范围。
+
+### 5.5 领取
 
 领取请求无 JSON 请求体，必须提供 `Idempotency-Key`。成功返回 `201` 和用户券；相同 Key、相同路径返回第一次 `201` 结果。
 
@@ -487,8 +494,11 @@ platformSubsidyRefundAmount:Money
 | --- | --- | --- | --- | --- | --- |
 | GET | `/api/shops/{shopId}/coupon-activities` | `shop:coupon:read` | 否 | `status,activityType,keyword,createdFrom,createdTo,page,pageSize,sort` | `Page<CouponActivityAdminView>` |
 | POST | `/api/shops/{shopId}/coupon-activities` | `shop:coupon:manage` | 必填 | `CreateCouponActivityRequest` | `CouponActivityAdminView`，`201` |
+| POST | `/api/shops/{shopId}/coupon-activities/recurring` | `shop:coupon:manage` | 必填 | `CreateRecurringCouponActivityRequest` | `CouponActivityAdminView`，`201` |
 | GET | `/api/shops/{shopId}/coupon-activities/{activityId}` | `shop:coupon:read` | 否 | 无 | `CouponActivityAdminView` |
 | PUT | `/api/shops/{shopId}/coupon-activities/{activityId}` | `shop:coupon:manage` | 建议 | `UpdateCouponActivityRequest` | `CouponActivityAdminView` |
+| GET | `/api/shops/{shopId}/coupon-activities/{activityId}/schedule` | `shop:coupon:read` | 否 | 无 | `CouponActivityScheduleView` |
+| PUT | `/api/shops/{shopId}/coupon-activities/{activityId}/schedule` | `shop:coupon:manage` | 建议 | `UpdateCouponActivityScheduleRequest` | `CouponActivityScheduleView` |
 | POST | `/api/shops/{shopId}/coupon-activities/{activityId}/publish` | `shop:coupon:manage` | 必填 | `VersionRequest` | `CouponActivityAdminView` |
 | POST | `/api/shops/{shopId}/coupon-activities/{activityId}/pause` | `shop:coupon:manage` | 必填 | `ReasonVersionRequest` | `CouponActivityAdminView` |
 | POST | `/api/shops/{shopId}/coupon-activities/{activityId}/resume` | `shop:coupon:manage` | 必填 | `VersionRequest` | `CouponActivityAdminView` |
@@ -510,6 +520,8 @@ platformSubsidyRefundAmount:Money
 ```
 
 店铺活动 `ownerType` 由路径决定，客户端不得提交。店铺必须为 `ACTIVE` 才能发布；`PENDING/SUSPENDED/CLOSED` 返回 `SHOP_COUPON_PUBLISH_NOT_ALLOWED`。
+
+周期创建接口固定写入 `activityType=FLASH_CLAIM` 和 `status=DRAFT`，并将活动 `startsAt/endsAt` 物化为第一个有效窗口开始和最后一个有效窗口结束。周期规则只允许在草稿期通过 schedule 子资源全量替换；现有活动 PUT 对周期活动只允许修改展示字段，不能改变类型或物化时间边界。
 
 ### 9.2 模板接口
 
@@ -620,7 +632,7 @@ platformSubsidyRefundAmount:Money
 | 活动 | `/api/platform/coupon-activities` | 读 `platform:coupon:read`，写 `platform:coupon:manage` |
 | 模板 | `/api/platform/coupon-templates` | 读 `platform:coupon:read`，写 `platform:coupon:manage` |
 
-活动资源的后缀与上方活动接口一致：`/{activityId}`、`/publish`、`/pause`、`/resume`、`/end`、`/cancel`。模板资源的后缀与上方模板接口一致：`/{templateId}`、`/scope`、`/activate`、`/pause`、`/resume`、`/end`、`/copy`、`/presentation`。两类资源不能交叉调用同名后缀。
+活动资源除上方后缀外，同时支持 `POST /recurring`、`GET /{activityId}/schedule` 和 `PUT /{activityId}/schedule`，权限和 DTO 与店铺版本一致。模板资源的后缀与上方模板接口一致：`/{templateId}`、`/scope`、`/activate`、`/pause`、`/resume`、`/end`、`/copy`、`/presentation`。两类资源不能交叉调用同名后缀。
 
 平台创建模板额外提交：
 

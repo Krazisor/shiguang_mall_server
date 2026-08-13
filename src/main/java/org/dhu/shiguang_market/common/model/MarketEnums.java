@@ -155,6 +155,12 @@ public final class MarketEnums {
         DRAFT, SCHEDULED, RUNNING, PAUSED, ENDED, CANCELLED
     }
 
+    public enum CouponRecurrenceType implements StringCodeEnum { DAILY, WEEKLY, MONTHLY }
+
+    public enum CouponScheduleType implements StringCodeEnum { ONCE, RECURRING }
+
+    public enum CouponClaimWindowStatus implements StringCodeEnum { WAITING, OPEN, PAUSED, ENDED }
+
     public enum CouponSelectionMode implements StringCodeEnum { AUTO, MANUAL, NONE }
 
     public enum CouponRedemptionStatus implements StringCodeEnum {

@@ -43,6 +43,7 @@ import org.dhu.shiguang_market.coupon.dto.CouponDtos.ClaimableActivitySummaryVie
 import org.dhu.shiguang_market.coupon.dto.CouponDtos.ClaimableTemplateView;
 import org.dhu.shiguang_market.coupon.dto.CouponDtos.CouponCodeBatchCreatedView;
 import org.dhu.shiguang_market.coupon.dto.CouponDtos.CouponCodeBatchSummaryView;
+import org.dhu.shiguang_market.coupon.dto.CouponDtos.CouponActivityScheduleView;
 import org.dhu.shiguang_market.coupon.dto.CouponDtos.CouponGrantResult;
 import org.dhu.shiguang_market.coupon.dto.CouponDtos.CreateRedeemCodeBatchRequest;
 import org.dhu.shiguang_market.coupon.dto.CouponDtos.GrantCouponsRequest;
@@ -97,6 +98,7 @@ public class CouponService {
     private final CouponEligibilityService eligibility;
     private final CouponRateLimitService rateLimits;
     private final CouponAuditService audit;
+    private final CouponScheduleService schedules;
     private final String redeemSecret;
     private final int redeemKeyVersion;
 
@@ -108,7 +110,7 @@ public class CouponService {
                          CouponScopeMappers.Category categoryScopes, CouponScopeMappers.Spu spuScopes,
                          CouponScopeMappers.Sku skuScopes, PublicCatalogService catalog, CouponBudgetService budget,
                          CouponEligibilityService eligibility, CouponRateLimitService rateLimits,
-                         CouponAuditService audit,
+                         CouponAuditService audit, CouponScheduleService schedules,
                          @Value("${market.coupon.redeem-secret:development-only-change-me}") String redeemSecret,
                          @Value("${market.coupon.redeem-key-version:1}") int redeemKeyVersion) {
         this.activityMapper = activityMapper; this.templateMapper = templateMapper;
@@ -122,6 +124,7 @@ public class CouponService {
         this.eligibility = eligibility;
         this.rateLimits = rateLimits;
         this.audit = audit;
+        this.schedules = schedules;
     }
 
     public PageView<ClaimableActivitySummaryView> center(CouponActivityType type, Long shopId,
@@ -166,6 +169,19 @@ public class CouponService {
         if (templates.isEmpty()) throw notFound();
         return new ClaimableActivityDetailView(summary(activity), templates.stream()
                 .map(template -> claimableTemplate(activity, template, currentUser.id())).toList());
+    }
+
+    public CouponActivityScheduleView centerSchedule(long activityId) {
+        require("coupon:read:self");
+        CouponActivity activity = activityMapper.selectById(activityId);
+        if (activity == null || !visible(activity)) throw notFound();
+        boolean hasVisibleTemplate = templateMapper.selectCount(new LambdaQueryWrapper<CouponTemplate>()
+                .eq(CouponTemplate::getActivityId, activityId)
+                .in(CouponTemplate::getDistributionType, CouponDistributionType.PUBLIC_CLAIM,
+                        CouponDistributionType.FLASH_CLAIM)
+                .in(CouponTemplate::getStatus, CouponTemplateStatus.ACTIVE, CouponTemplateStatus.PAUSED)) > 0;
+        if (!hasVisibleTemplate) throw notFound();
+        return schedules.view(activity);
     }
 
     @Transactional
@@ -480,6 +496,7 @@ public class CouponService {
         if (activity.getStatus() == CouponActivityStatus.ENDED || activity.getStatus() == CouponActivityStatus.CANCELLED
                 || !now.isBefore(activity.getEndsAt()) || !now.isBefore(template.getClaimEndsAt())) return "ACTIVITY_ENDED";
         if (template.getStatus() != CouponTemplateStatus.ACTIVE) return "ACTIVITY_PAUSED";
+        if (!schedules.isOpen(activity.getId(), now)) return "NOT_STARTED";
         String audience = eligibility.issueIneligibilityReason(userId, template, template.getDistributionType());
         if (audience != null) return audience;
         if (claimed >= template.getPerUserLimit()) return "USER_LIMIT_REACHED";
@@ -517,7 +534,8 @@ public class CouponService {
         if (linkedActivityId != null && !checkActivity) {
             CouponActivity activity = activityMapper.selectById(linkedActivityId);
             if (activity == null || activity.getStatus() != CouponActivityStatus.RUNNING
-                    || now.isBefore(activity.getStartsAt()) || !now.isBefore(activity.getEndsAt())) {
+                    || now.isBefore(activity.getStartsAt()) || !now.isBefore(activity.getEndsAt())
+                    || !schedules.isOpen(activity.getId(), now)) {
                 throw BusinessException.unprocessable("COUPON_ACTIVITY_NOT_CLAIMABLE", "关联活动当前不可发券");
             }
         }
@@ -537,6 +555,9 @@ public class CouponService {
         }
         if (now.isBefore(activity.getStartsAt())) {
             throw BusinessException.unprocessable("COUPON_ACTIVITY_NOT_CLAIMABLE", "活动尚未开始");
+        }
+        if (!schedules.isOpen(activity.getId(), now)) {
+            throw BusinessException.unprocessable("COUPON_ACTIVITY_NOT_CLAIMABLE", "当前不在抢券窗口内");
         }
         if (activity.getStatus() == CouponActivityStatus.SCHEDULED) {
             activity.setStatus(CouponActivityStatus.RUNNING);

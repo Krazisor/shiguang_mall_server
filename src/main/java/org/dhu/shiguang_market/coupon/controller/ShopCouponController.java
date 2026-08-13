@@ -34,9 +34,30 @@ public class ShopCouponController {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(admin.createActivity(shopId, request, key)));
     }
 
+    @PostMapping("/coupon-activities/recurring")
+    public ResponseEntity<ApiResponse<CouponActivityAdminView>> createRecurringActivity(
+            @PathVariable long shopId, @Valid @RequestBody CreateRecurringCouponActivityRequest request,
+            @RequestHeader("Idempotency-Key") String key) {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(ApiResponse.success(admin.createRecurringActivity(shopId, request, key)));
+    }
+
     @GetMapping("/coupon-activities/{activityId}")
     public ApiResponse<CouponActivityAdminView> activity(@PathVariable long shopId, @PathVariable long activityId) {
         return ApiResponse.success(admin.activity(shopId, activityId));
+    }
+
+    @GetMapping("/coupon-activities/{activityId}/schedule")
+    public ApiResponse<CouponActivityScheduleView> activitySchedule(@PathVariable long shopId,
+                                                                    @PathVariable long activityId) {
+        return ApiResponse.success(admin.activitySchedule(shopId, activityId));
+    }
+
+    @PutMapping("/coupon-activities/{activityId}/schedule")
+    public ApiResponse<CouponActivityScheduleView> updateActivitySchedule(@PathVariable long shopId,
+                                                                          @PathVariable long activityId,
+                                                                          @Valid @RequestBody UpdateCouponActivityScheduleRequest request) {
+        return ApiResponse.success(admin.updateActivitySchedule(shopId, activityId, request));
     }
 
     @PutMapping("/coupon-activities/{activityId}")
