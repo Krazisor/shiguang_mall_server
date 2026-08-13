@@ -248,6 +248,34 @@ public class AfterSaleAppealService {
                     || amount.compareTo(afterSale.getRequestedAmount()) > 0) {
                 throw BusinessException.conflict("AFTER_SALE_APPROVAL_EXCEEDED", "平台批准额度超过申请上限");
             }
+
+            // The appeal can outlive the merchant review, so the order item may have
+            // accumulated refunds or other approved after-sales in the meantime.
+            // Re-check the same remaining allowance used by the merchant approval path
+            // while holding the item row lock, before changing the appeal state.
+            OrderItem item = itemMapper.selectOne(new LambdaQueryWrapper<OrderItem>()
+                    .eq(OrderItem::getId, afterSale.getOrderItemId()).last("FOR UPDATE"));
+            if (item == null) {
+                throw BusinessException.conflict("AFTER_SALE_APPROVAL_EXCEEDED", "订单明细不存在");
+            }
+            List<AfterSaleRequest> activeOthers = afterSaleMapper.selectList(new LambdaQueryWrapper<AfterSaleRequest>()
+                    .eq(AfterSaleRequest::getOrderItemId, afterSale.getOrderItemId())
+                    .in(AfterSaleRequest::getStatus, List.of(AfterSaleStatus.WAITING_RETURN, AfterSaleStatus.REFUNDING))
+                    .ne(AfterSaleRequest::getId, afterSale.getId()));
+            int refundedQuantity = item.getRefundedQuantity() == null ? 0 : item.getRefundedQuantity();
+            BigDecimal refundedAmount = item.getRefundedAmount() == null ? BigDecimal.ZERO : item.getRefundedAmount();
+            int otherUsedQuantity = 0;
+            BigDecimal otherUsedAmount = BigDecimal.ZERO;
+            for (AfterSaleRequest other : activeOthers) {
+                otherUsedQuantity += other.getApprovedQuantity() == null ? 0 : other.getApprovedQuantity();
+                otherUsedAmount = otherUsedAmount.add(other.getApprovedAmount() == null
+                        ? BigDecimal.ZERO : other.getApprovedAmount());
+            }
+            int maxQuantity = item.getQuantity() - refundedQuantity - otherUsedQuantity;
+            BigDecimal maxAmount = item.getPayableAmount().subtract(refundedAmount).subtract(otherUsedAmount);
+            if (request.approvedQuantity() > maxQuantity || amount.compareTo(maxAmount) > 0) {
+                throw BusinessException.conflict("AFTER_SALE_APPROVAL_EXCEEDED", "平台批准额度超过当前可退上限");
+            }
             appeal.setApprovedQuantity(request.approvedQuantity());
             appeal.setApprovedAmount(amount);
             appeal.setStatus(AfterSaleAppealStatus.APPROVED);
@@ -256,6 +284,11 @@ public class AfterSaleAppealService {
             afterSale.setReviewerId(operatorId);
             afterSale.setReviewComment(comment);
             afterSale.setReviewedAt(LocalDateTime.now());
+            if (afterSale.getRequestType() == AfterSaleType.REFUND_ONLY && afterSale.getRefundNo() == null) {
+                // refund_status=PROCESSING requires refund_no in the database, and the
+                // following refund execution must reuse the same business number.
+                afterSale.setRefundNo(numbers.next("RF"));
+            }
             afterSale.setStatus(afterSale.getRequestType() == AfterSaleType.RETURN_REFUND
                     ? AfterSaleStatus.WAITING_RETURN : AfterSaleStatus.REFUNDING);
             afterSale.setRefundStatus(afterSale.getRequestType() == AfterSaleType.RETURN_REFUND
