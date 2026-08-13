@@ -24,7 +24,8 @@ COPY --from=builder --chown=spring:spring \
 
 USER spring:spring
 
-ENV JAVA_TOOL_OPTIONS="-XX:MaxRAMPercentage=75.0"
+ENV TZ="Asia/Shanghai" \
+    JAVA_TOOL_OPTIONS="-XX:MaxRAMPercentage=75.0 -Duser.timezone=Asia/Shanghai"
 
 EXPOSE 8080
 

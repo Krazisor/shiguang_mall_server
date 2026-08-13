@@ -14,6 +14,10 @@ spring:
   application:
     name: shiguang_market
   jackson:
+    time-zone: Asia/Shanghai
+    datatype:
+      datetime:
+        adjust-dates-to-context-time-zone: false
     deserialization:
       fail-on-unknown-properties: true
   servlet:

@@ -1,5 +1,6 @@
 package org.dhu.shiguang_market.coupon.dto;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.DecimalMin;
@@ -186,7 +187,10 @@ public final class CouponDtos {
     public record RecurringCouponSchedule(
             @NotNull CouponRecurrenceType recurrenceType, List<Integer> weekdays, List<Integer> monthDays,
             @NotBlank String dailyStartsAt, @NotNull @Min(1) @Max(1440) Integer windowDurationMinutes,
-            @NotNull OffsetDateTime recurrenceStartsAt, @NotNull OffsetDateTime recurrenceEndsAt,
+            @NotNull @JsonFormat(without = JsonFormat.Feature.ADJUST_DATES_TO_CONTEXT_TIME_ZONE)
+            OffsetDateTime recurrenceStartsAt,
+            @NotNull @JsonFormat(without = JsonFormat.Feature.ADJUST_DATES_TO_CONTEXT_TIME_ZONE)
+            OffsetDateTime recurrenceEndsAt,
             @NotBlank String timezone) {
     }
 
