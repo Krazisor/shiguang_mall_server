@@ -123,8 +123,8 @@ public class MerchantSettlementAdapter implements MerchantSettlementPort {
         settlement.setPendingAmount(nz(settlement.getPendingAmount()).subtract(pendingDebit));
         settlement.setReleasedAmount(settlementReleased.subtract(amount.subtract(pendingDebit)));
         if (settlement.getPendingAmount().signum() == 0 && settlement.getReleasedAmount().signum() == 0) {
+            // settledAt only records an actual pending-to-available release; a refund merely terminates settlement.
             settlement.setStatus(SettlementStatus.REFUNDED);
-            settlement.setSettledAt(LocalDateTime.now());
         }
         settlementMapper.updateById(settlement);
         return true;

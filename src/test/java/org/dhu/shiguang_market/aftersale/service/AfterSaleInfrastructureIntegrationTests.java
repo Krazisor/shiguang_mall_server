@@ -27,6 +27,7 @@ import org.dhu.shiguang_market.common.model.MarketEnums.OrderPaymentStatus;
 import org.dhu.shiguang_market.common.model.MarketEnums.OrderStatus;
 import org.dhu.shiguang_market.common.model.MarketEnums.RefundStatus;
 import org.dhu.shiguang_market.common.model.MarketEnums.ReservationStatus;
+import org.dhu.shiguang_market.common.model.MarketEnums.SettlementStatus;
 import org.dhu.shiguang_market.common.model.MarketEnums.TradeStatus;
 import org.dhu.shiguang_market.common.model.MarketEnums.UserStatus;
 import org.dhu.shiguang_market.common.model.MarketEnums.WalletStatus;
@@ -40,6 +41,9 @@ import org.dhu.shiguang_market.inventory.mapper.InventoryStockMapper;
 import org.dhu.shiguang_market.inventory.mapper.InventoryTransactionMapper;
 import org.dhu.shiguang_market.inventory.model.InventoryStock;
 import org.dhu.shiguang_market.inventory.model.InventoryTransaction;
+import org.dhu.shiguang_market.integration.merchantwallet.MerchantSettlementPort;
+import org.dhu.shiguang_market.merchantwallet.mapper.ShopSettlementMapper;
+import org.dhu.shiguang_market.merchantwallet.model.ShopSettlement;
 import org.dhu.shiguang_market.order.mapper.OrderInfoMapper;
 import org.dhu.shiguang_market.order.mapper.OrderItemMapper;
 import org.dhu.shiguang_market.order.mapper.TradeOrderMapper;
@@ -86,6 +90,8 @@ class AfterSaleInfrastructureIntegrationTests {
     @Autowired private InventoryTransactionMapper inventoryTransactionMapper;
     @Autowired private WalletAccountMapper walletMapper;
     @Autowired private WalletTransactionMapper walletTransactionMapper;
+    @Autowired private MerchantSettlementPort merchantSettlement;
+    @Autowired private ShopSettlementMapper settlementMapper;
     @Autowired private ProductSkuMapper skuMapper;
     @Autowired private ShopMapper shopMapper;
     @Autowired private SysUserMapper userMapper;
@@ -153,6 +159,8 @@ class AfterSaleInfrastructureIntegrationTests {
     @Transactional
     void refundOnlyApprovalPassesMysqlChecksAndUpdatesWalletInventoryAndOrder() {
         Fixture fixture = createOrder(OrderStatus.PENDING_SHIPMENT, ReservationStatus.LOCKED);
+        OrderInfo order = orderMapper.selectById(fixture.orderId());
+        merchantSettlement.recordPaidOrder(order, ITEM_AMOUNT);
         AfterSaleRequest afterSale = insertPendingAfterSale(fixture, AfterSaleType.REFUND_ONLY);
         WalletAccount walletBefore = walletMapper.selectById(fixture.walletId());
         InventoryStock stockBefore = stockMapper.selectById(fixture.stockId());
@@ -168,6 +176,8 @@ class AfterSaleInfrastructureIntegrationTests {
         InventoryStock stockAfter = stockMapper.selectById(fixture.stockId());
         OrderInfo orderAfter = orderMapper.selectById(fixture.orderId());
         OrderItem itemAfter = itemMapper.selectById(fixture.itemId());
+        ShopSettlement settlementAfter = settlementMapper.selectByOrderAndShopForUpdate(
+                fixture.orderId(), fixture.shopId());
 
         assertThat(result.status()).isEqualTo(AfterSaleStatus.COMPLETED);
         assertThat(result.refundStatus()).isEqualTo(RefundStatus.SUCCESS);
@@ -181,6 +191,9 @@ class AfterSaleInfrastructureIntegrationTests {
         assertThat(orderAfter.getPaymentStatus()).isEqualTo(OrderPaymentStatus.REFUNDED);
         assertThat(orderAfter.getRefundAmount()).isEqualByComparingTo(ITEM_AMOUNT);
         assertThat(itemAfter.getReservationStatus()).isEqualTo(ReservationStatus.RELEASED);
+        assertThat(settlementAfter.getStatus()).isEqualTo(SettlementStatus.REFUNDED);
+        assertThat(settlementAfter.getPendingAmount()).isEqualByComparingTo("0.00");
+        assertThat(settlementAfter.getSettledAt()).isNull();
         assertThat(countWalletRefund(saved.getRefundNo())).isOne();
         assertThat(countInventoryFlow(saved.getAfterSaleNo(), InventoryTransactionType.RELEASE)).isOne();
     }
@@ -268,6 +281,9 @@ class AfterSaleInfrastructureIntegrationTests {
         trade.setTradeNo("TRIT" + suffix);
         trade.setUserId(wallet.getUserId());
         trade.setTradeStatus(TradeStatus.PAID);
+        trade.setGrossAmount(ITEM_AMOUNT);
+        trade.setCouponDiscountAmount(BigDecimal.ZERO.setScale(2));
+        trade.setUsesFirstOrderCoupon(false);
         trade.setPayableAmount(ITEM_AMOUNT);
         trade.setRecipientName("集成测试用户");
         trade.setRecipientPhone("13800000000");
@@ -290,6 +306,7 @@ class AfterSaleInfrastructureIntegrationTests {
         order.setPaymentStatus(OrderPaymentStatus.PAID);
         order.setItemAmount(ITEM_AMOUNT);
         order.setFreightAmount(new BigDecimal("0.00"));
+        order.setCouponDiscountAmount(BigDecimal.ZERO.setScale(2));
         order.setPayableAmount(ITEM_AMOUNT);
         order.setRefundAmount(new BigDecimal("0.00"));
         if (status == OrderStatus.PENDING_RECEIPT) {
@@ -316,6 +333,7 @@ class AfterSaleInfrastructureIntegrationTests {
         item.setQuantity(1);
         item.setOriginalAmount(ITEM_AMOUNT);
         item.setFreightAmount(new BigDecimal("0.00"));
+        item.setCouponDiscountAmount(BigDecimal.ZERO.setScale(2));
         item.setPayableAmount(ITEM_AMOUNT);
         item.setRefundedQuantity(0);
         item.setRefundedAmount(new BigDecimal("0.00"));
