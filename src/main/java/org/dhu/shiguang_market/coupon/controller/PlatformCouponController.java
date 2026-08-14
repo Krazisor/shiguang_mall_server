@@ -117,6 +117,11 @@ public class PlatformCouponController {
         return ApiResponse.success(admin.templateAction(null, templateId, action, r.reason(), r.version(), key));
     }
 
+    @PostMapping("/coupon-templates/{templateId}/archive")
+    public ApiResponse<CouponTemplateAdminDetailView> archiveTemplate(@PathVariable long templateId, @Valid @RequestBody ReasonVersionRequest r, @RequestHeader("Idempotency-Key") String key) {
+        return ApiResponse.success(admin.templateAction(null, templateId, "archive", r.reason(), r.version(), key));
+    }
+
     @PostMapping("/coupon-templates/{templateId}/copy")
     public ResponseEntity<ApiResponse<CouponTemplateAdminDetailView>> copy(@PathVariable long templateId, @Valid @RequestBody CopyCouponTemplateRequest r, @RequestHeader("Idempotency-Key") String key) {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(admin.copyTemplate(null, templateId, r, key)));

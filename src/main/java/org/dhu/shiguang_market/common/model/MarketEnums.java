@@ -141,7 +141,7 @@ public final class MarketEnums {
 
     public enum CouponRestorePolicy implements StringCodeEnum { NEVER, FULL_TRADE_ONLY }
 
-    public enum CouponTemplateStatus implements StringCodeEnum { DRAFT, ACTIVE, PAUSED, ENDED }
+    public enum CouponTemplateStatus implements StringCodeEnum { DRAFT, ACTIVE, PAUSED, ENDED, ARCHIVED }
 
     public enum UserCouponStatus implements StringCodeEnum {
         AVAILABLE, LOCKED, USED, EXPIRED, REVOKED

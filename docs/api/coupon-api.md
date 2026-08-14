@@ -66,7 +66,7 @@
 | `CouponValidityType` | `FIXED_RANGE`、`RELATIVE_AFTER_CLAIM` |
 | `CouponStackMode` | `EXCLUSIVE`、`CROSS_OWNER` |
 | `CouponRestorePolicy` | `NEVER`、`FULL_TRADE_ONLY` |
-| `CouponTemplateStatus` | `DRAFT`、`ACTIVE`、`PAUSED`、`ENDED` |
+| `CouponTemplateStatus` | `DRAFT`、`ACTIVE`、`PAUSED`、`ENDED`、`ARCHIVED` |
 | `UserCouponStatus` | `AVAILABLE`、`LOCKED`、`USED`、`EXPIRED`、`REVOKED` |
 | `CouponActivityType` | `COUPON_CENTER`、`FLASH_CLAIM`、`NEW_USER_WELCOME`、`TARGETED_CAMPAIGN` |
 | `CouponActivityStatus` | `DRAFT`、`SCHEDULED`、`RUNNING`、`PAUSED`、`ENDED`、`CANCELLED` |
@@ -80,11 +80,11 @@
 | `coupon:read:self` | `PLATFORM` | 查看领券中心、本人用户券和本人优惠明细 |
 | `coupon:claim` | `PLATFORM` | 领取、抢券和兑换 |
 | `shop:coupon:read` | `SHOP` | 查看本店活动、模板、核销和报表 |
-| `shop:coupon:manage` | `SHOP` | 创建、编辑、发布、暂停和结束本店活动/模板 |
+| `shop:coupon:manage` | `SHOP` | 创建、编辑、发布、暂停、结束和归档本店活动/模板 |
 | `shop:coupon:grant` | `SHOP` | 本店定向发券和生成兑换码批次 |
 | `shop:coupon:funding:approve` | `SHOP` | 接受或拒绝平台联合活动中本店承担比例 |
 | `platform:coupon:read` | `PLATFORM` | 平台优惠券全局只读和报表 |
-| `platform:coupon:manage` | `PLATFORM` | 创建、编辑和发布平台活动/模板 |
+| `platform:coupon:manage` | `PLATFORM` | 创建、编辑、发布和归档平台活动/模板 |
 | `platform:coupon:grant` | `PLATFORM` | 平台定向发券和兑换码批次 |
 | `platform:coupon:governance` | `PLATFORM` | 治理暂停店铺活动、撤销未使用用户券 |
 
@@ -536,10 +536,15 @@ platformSubsidyRefundAmount:Money
 | POST | `/api/shops/{shopId}/coupon-templates/{templateId}/pause` | `shop:coupon:manage` | 必填 | `ReasonVersionRequest` | `CouponTemplateAdminDetailView` |
 | POST | `/api/shops/{shopId}/coupon-templates/{templateId}/resume` | `shop:coupon:manage` | 必填 | `VersionRequest` | `CouponTemplateAdminDetailView` |
 | POST | `/api/shops/{shopId}/coupon-templates/{templateId}/end` | `shop:coupon:manage` | 必填 | `ReasonVersionRequest` | `CouponTemplateAdminDetailView` |
+| POST | `/api/shops/{shopId}/coupon-templates/{templateId}/archive` | `shop:coupon:manage` | 必填 | `ReasonVersionRequest` | `CouponTemplateAdminDetailView` |
 | POST | `/api/shops/{shopId}/coupon-templates/{templateId}/copy` | `shop:coupon:manage` | 必填 | `CopyCouponTemplateRequest` | 新 `CouponTemplateAdminDetailView`，`201` |
 | PATCH | `/api/shops/{shopId}/coupon-templates/{templateId}/presentation` | `shop:coupon:manage` | 建议 | `UpdateCouponPresentationRequest` | `CouponTemplateAdminDetailView` |
 
 店铺创建请求不允许提交 `ownerType`、`ownerShopId`、`fundingType` 或 `platformShareRate`；服务端固定 `ownerType=SHOP`、`ownerShopId=path shopId`、`fundingType=SHOP`、`platformShareRate=0.0000`。店铺模板不得选择 `SYSTEM_GRANT`，新客触达使用 `PUBLIC_CLAIM` 或 `DIRECT_GRANT`。
+
+模板归档用于隐藏废弃配置，不是删除。只允许 `DRAFT -> ARCHIVED` 或 `ENDED -> ARCHIVED`，`ACTIVE/PAUSED` 必须先结束；归档原因 trim 后 `1..500`。`ARCHIVED` 不可恢复，只能读取详情、追踪历史或通过 `copy` 创建新草稿。归档不撤销用户券、不删除范围/兑换码/核销/预算记录，也不改变已领券使用和退款返券规则。
+
+模板列表未提交 `status` 时默认排除 `ARCHIVED`；提交 `status=ARCHIVED` 时只查询归档模板，不新增 `includeArchived`。授权详情和范围目标接口仍可按 ID 读取归档模板。`CouponActivityAdminView.templateCount` 排除归档模板，历史 `issuedCount/consumedCount/couponDiscountAmount` 仍包含归档模板产生的数据。
 
 ### 9.3 创建模板请求
 
@@ -632,7 +637,7 @@ platformSubsidyRefundAmount:Money
 | 活动 | `/api/platform/coupon-activities` | 读 `platform:coupon:read`，写 `platform:coupon:manage` |
 | 模板 | `/api/platform/coupon-templates` | 读 `platform:coupon:read`，写 `platform:coupon:manage` |
 
-活动资源除上方后缀外，同时支持 `POST /recurring`、`GET /{activityId}/schedule` 和 `PUT /{activityId}/schedule`，权限和 DTO 与店铺版本一致。模板资源的后缀与上方模板接口一致：`/{templateId}`、`/scope`、`/activate`、`/pause`、`/resume`、`/end`、`/copy`、`/presentation`。两类资源不能交叉调用同名后缀。
+活动资源除上方后缀外，同时支持 `POST /recurring`、`GET /{activityId}/schedule` 和 `PUT /{activityId}/schedule`，权限和 DTO 与店铺版本一致。模板资源的后缀与上方模板接口一致：`/{templateId}`、`/scope`、`/activate`、`/pause`、`/resume`、`/end`、`/archive`、`/copy`、`/presentation`。两类资源不能交叉调用同名后缀。
 
 平台创建模板额外提交：
 
@@ -878,6 +883,18 @@ GET .../coupon-templates/{templateId}/scope-targets?page=1&pageSize=100
 
 禁止为了返回上万个目标关闭分页上限。
 
+模板管理详情的 `availableActions` 按状态返回：
+
+| 状态 | `availableActions` |
+| --- | --- |
+| `DRAFT` | `EDIT`、`ACTIVATE`、`COPY`、`ARCHIVE` |
+| `ACTIVE` | `PAUSE`、`END`、`COPY` |
+| `PAUSED` | `RESUME`、`END`、`COPY` |
+| `ENDED` | `COPY`、`ARCHIVE` |
+| `ARCHIVED` | `COPY` |
+
+归档模板拒绝完整更新、范围替换、展示字段修改、状态动作、联合承担邀请和参与决定；复制继续执行现有活动关系校验。源模板关联的活动已经结束或取消时，复制请求必须显式提交 `activityId=null` 或改为一个允许关联的新活动。
+
 ## 14. 状态动作、版本与幂等
 
 ### 14.1 必须幂等的写接口
@@ -886,7 +903,7 @@ GET .../coupon-templates/{templateId}/scope-targets?page=1&pageSize=100
 
 - 领取、限时抢券、兑换码；
 - 创建活动、创建模板、复制模板；
-- 发布、激活、暂停、恢复、结束、取消；
+- 发布、激活、暂停、恢复、结束、取消、归档；
 - 定向发券、生成兑换码批次；
 - 平台治理暂停/恢复、撤销用户券；
 - 带券创建交易继续继承现有创建交易幂等要求。
@@ -983,7 +1000,7 @@ GET .../coupon-templates/{templateId}/scope-targets?page=1&pageSize=100
 | HTTP | 错误码 | 场景 |
 | ---: | --- | --- |
 | 409 | `COUPON_ACTIVITY_STATE_CONFLICT` | 当前活动状态不允许动作 |
-| 409 | `COUPON_TEMPLATE_STATE_CONFLICT` | 当前模板状态不允许动作 |
+| 409 | `COUPON_TEMPLATE_STATE_CONFLICT` | 当前模板状态不允许动作，包括非 `DRAFT/ENDED` 模板归档或修改归档模板 |
 | 409 | `COUPON_TEMPLATE_RULES_IMMUTABLE` | 已发行后试图修改经济规则/范围 |
 | 409 | `COUPON_HAS_LOCKED_TRADES` | 结束/关闭动作会破坏待支付预占 |
 | 422 | `COUPON_TEMPLATE_INVALID` | 券种、范围、时间、预算或人群组合无效 |
@@ -1026,3 +1043,4 @@ GET .../coupon-templates/{templateId}/scope-targets?page=1&pageSize=100
 11. 只读运营权限不能调用发布、发券、暂停、恢复或撤销接口。
 12. 所有必填幂等接口缺少 Header 时返回 `400 BAD_REQUEST`，不会先执行业务再报错。
 13. 注册事件与补偿任务并发处理同一用户/模板时只发一张券，任一营销失败都不改变注册结果。
+14. 草稿或结束模板归档后从默认列表隐藏，显式筛选仍可查询，已领券、预算和对账数据不变。

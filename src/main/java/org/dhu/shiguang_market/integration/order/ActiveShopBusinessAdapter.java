@@ -70,7 +70,8 @@ public class ActiveShopBusinessAdapter implements ActiveShopBusinessPort {
 
         boolean unfinishedTemplates = templateMapper.exists(new LambdaQueryWrapper<CouponTemplate>()
                 .eq(CouponTemplate::getOwnerShopId, shopId)
-                .ne(CouponTemplate::getStatus, CouponTemplateStatus.ENDED));
+                .in(CouponTemplate::getStatus, CouponTemplateStatus.DRAFT,
+                        CouponTemplateStatus.ACTIVE, CouponTemplateStatus.PAUSED));
         if (unfinishedTemplates) return true;
 
         return couponMapper.exists(new LambdaQueryWrapper<UserCoupon>()

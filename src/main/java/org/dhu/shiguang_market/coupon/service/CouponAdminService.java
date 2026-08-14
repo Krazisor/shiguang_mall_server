@@ -500,6 +500,8 @@ public class CouponAdminService {
         authorize(shopId, true);
         CouponTemplate t = templateRecord(shopId, id);
         version(t.getVersion(), scope.version());
+        if (t.getStatus() == CouponTemplateStatus.ARCHIVED)
+            state("COUPON_TEMPLATE_STATE_CONFLICT");
         if (t.getFirstIssuedAt() != null)
             throw BusinessException.conflict("COUPON_TEMPLATE_RULES_IMMUTABLE", "已发行模板的范围不可修改");
         t.setScopeType(scope.scopeType());
@@ -518,6 +520,8 @@ public class CouponAdminService {
         authorize(shopId, true);
         CouponTemplate t = templateRecord(shopId, id);
         version(t.getVersion(), request.version());
+        if (t.getStatus() == CouponTemplateStatus.ARCHIVED)
+            state("COUPON_TEMPLATE_STATE_CONFLICT");
         if (!request.hasCouponName() && !request.hasDescription() && !request.hasSortOrder())
             throw BusinessException.badRequest("VALIDATION_FAILED", "至少提交一个展示字段");
         if (request.hasCouponName()) t.setCouponName(requireText(request.couponName(), 128));
@@ -548,10 +552,12 @@ public class CouponAdminService {
                 case "pause" -> from == CouponTemplateStatus.ACTIVE ? CouponTemplateStatus.PAUSED : null;
                 case "end" ->
                         (from == CouponTemplateStatus.ACTIVE || from == CouponTemplateStatus.PAUSED) ? CouponTemplateStatus.ENDED : null;
+                case "archive" ->
+                        (from == CouponTemplateStatus.DRAFT || from == CouponTemplateStatus.ENDED) ? CouponTemplateStatus.ARCHIVED : null;
                 default -> null;
             };
             if (to == null) state("COUPON_TEMPLATE_STATE_CONFLICT");
-            if ((action.equals("pause") || action.equals("end"))) requireReason(reason);
+            if (Set.of("pause", "end", "archive").contains(action)) requireReason(reason);
             if (to == CouponTemplateStatus.ACTIVE) validateTemplate(t, currentScope(t), false);
             t.setStatus(to);
             t.setUpdatedBy(operator);
@@ -568,6 +574,8 @@ public class CouponAdminService {
         return idempotency.execute(operator, "POST", path, key, request, CouponFundingInvitationBatchView.class, () -> {
             CouponTemplate t = templateRecord(null, templateId);
             version(t.getVersion(), request.version());
+            if (t.getStatus() == CouponTemplateStatus.ARCHIVED)
+                state("COUPON_TEMPLATE_STATE_CONFLICT");
             if (t.getFundingType() != CouponFundingType.SHARED || t.getFirstIssuedAt() != null)
                 throw BusinessException.conflict("COUPON_FUNDING_ALREADY_FROZEN", "联合承担关系不可修改");
             if (t.getStatus() != CouponTemplateStatus.DRAFT) state("COUPON_TEMPLATE_STATE_CONFLICT");
@@ -629,6 +637,9 @@ public class CouponAdminService {
             if (p == null) throw notFound();
             version(p.getVersion(), request.version());
             CouponTemplate t = templateMapper.selectById(p.getTemplateId());
+            if (t == null) throw notFound();
+            if (t.getStatus() == CouponTemplateStatus.ARCHIVED)
+                state("COUPON_TEMPLATE_STATE_CONFLICT");
             if (t.getFirstIssuedAt() != null)
                 throw BusinessException.conflict("COUPON_FUNDING_ALREADY_FROZEN", "联合承担已冻结");
             if (p.getStatus() != CouponFundingParticipationStatus.PENDING) state("COUPON_TEMPLATE_STATE_CONFLICT");
@@ -1074,6 +1085,7 @@ public class CouponAdminService {
         String text = Formatters.trimToNull(keyword);
         LambdaQueryWrapper<CouponTemplate> query = new LambdaQueryWrapper<CouponTemplate>()
                 .eq(status != null, CouponTemplate::getStatus, status)
+                .ne(status == null, CouponTemplate::getStatus, CouponTemplateStatus.ARCHIVED)
                 .eq(couponType != null, CouponTemplate::getCouponType, couponType);
         if (text != null) {
             query.and(value -> value.like(CouponTemplate::getTemplateNo, text)
@@ -1118,7 +1130,9 @@ public class CouponAdminService {
 
     private CouponActivityAdminView activityView(CouponActivity a) {
         Shop s = a.getShopId() == null ? null : shopMapper.selectById(a.getShopId());
-        int count = Math.toIntExact(templateMapper.selectCount(new LambdaQueryWrapper<CouponTemplate>().eq(CouponTemplate::getActivityId, a.getId())));
+        int count = Math.toIntExact(templateMapper.selectCount(new LambdaQueryWrapper<CouponTemplate>()
+                .eq(CouponTemplate::getActivityId, a.getId())
+                .ne(CouponTemplate::getStatus, CouponTemplateStatus.ARCHIVED)));
         CouponActivityMapper.ActivityMetric metrics = activityMapper.selectMetrics(a.getId());
         long issued = metrics == null ? 0 : metrics.issuedCount();
         long consumed = metrics == null ? 0 : metrics.consumedCount();
@@ -1215,7 +1229,7 @@ public class CouponAdminService {
 
     private CouponFundingParticipationView fundingView(FundingParticipation p, CouponTemplate t) {
         Shop s = shopMapper.selectById(p.getShopId());
-        return new CouponFundingParticipationView(id(p.getId()), id(t.getId()), t.getTemplateNo(), id(p.getShopId()), IdentityViewMapper.shop(s), rate(p.getPlatformShareRate()), rate(new BigDecimal("100.0000").subtract(p.getPlatformShareRate())), p.getStatus(), id(p.getInvitedBy()), time(p.getInvitedAt()), id(p.getDecidedBy()), time(p.getDecidedAt()), p.getDecisionReason(), nvl(p.getVersion()), p.getStatus() == CouponFundingParticipationStatus.PENDING ? List.of("ACCEPT", "REJECT") : List.of());
+        return new CouponFundingParticipationView(id(p.getId()), id(t.getId()), t.getTemplateNo(), id(p.getShopId()), IdentityViewMapper.shop(s), rate(p.getPlatformShareRate()), rate(new BigDecimal("100.0000").subtract(p.getPlatformShareRate())), p.getStatus(), id(p.getInvitedBy()), time(p.getInvitedAt()), id(p.getDecidedBy()), time(p.getDecidedAt()), p.getDecisionReason(), nvl(p.getVersion()), p.getStatus() == CouponFundingParticipationStatus.PENDING && t.getStatus() != CouponTemplateStatus.ARCHIVED ? List.of("ACCEPT", "REJECT") : List.of());
     }
 
     private long authorize(Long shopId, boolean write) {
@@ -1253,10 +1267,11 @@ public class CouponAdminService {
 
     private List<String> templateActions(CouponTemplate t) {
         return switch (t.getStatus()) {
-            case DRAFT -> List.of("EDIT", "ACTIVATE", "COPY");
+            case DRAFT -> List.of("EDIT", "ACTIVATE", "COPY", "ARCHIVE");
             case ACTIVE -> List.of("PAUSE", "END", "COPY");
             case PAUSED -> List.of("RESUME", "END", "COPY");
-            case ENDED -> List.of("COPY");
+            case ENDED -> List.of("COPY", "ARCHIVE");
+            case ARCHIVED -> List.of("COPY");
         };
     }
 

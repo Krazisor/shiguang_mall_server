@@ -297,9 +297,22 @@ multipart 请求中的文件本身不是 JSON DTO；上传成功后的统一响�
 
 现有 `CouponActivityAdminView`、`ClaimableActivitySummaryView`、`ClaimableActivityDetailView` 和 `ClaimableTemplateView` 字段集合保持不变；周期详情只通过 `CouponActivityScheduleView` 返回。
 
-## 14. DTO 变更检查
+## 14. 优惠券模板归档
 
-### 14.1 常用字段校验矩阵
+归档不新增 DTO，复用现有模型：
+
+| DTO/枚举 | 字段与约束 |
+| --- | --- |
+| `CouponTemplateStatus` | `Enum<DRAFT,ACTIVE,PAUSED,ENDED,ARCHIVED>` |
+| `ReasonVersionRequest` | `reason:string`、`version:int`；原因 trim 后 `1..500`，`version>=0` |
+| `CouponTemplateAdminSummaryView` | 字段集合不变；`status` 可以返回 `ARCHIVED` |
+| `CouponTemplateAdminDetailView` | 字段集合不变；`status` 可以返回 `ARCHIVED`，归档状态的 `availableActions=["COPY"]` |
+
+模板列表未提交 `status` 时排除 `ARCHIVED`，显式 `status=ARCHIVED` 时只返回归档模板。归档不是删除，授权详情和历史业务读取仍返回完整 DTO。
+
+## 15. DTO 变更检查
+
+### 15.1 常用字段校验矩阵
 
 | 字段 | 约束 |
 | --- | --- |
@@ -327,7 +340,7 @@ multipart 请求中的文件本身不是 JSON DTO；上传成功后的统一响�
 
 后端先去除规定字段的首尾空白再做长度校验；保留商品详情 HTML 和买家/审核说明内部的换行。数组超过上限、含重复项或 URL 非法统一返回 `VALIDATION_FAILED`。
 
-### 14.2 变更检查
+### 15.2 变更检查
 
 每次修改 DTO 时必须检查：
 

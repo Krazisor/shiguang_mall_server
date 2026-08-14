@@ -115,6 +115,11 @@ public class ShopCouponController {
         return ApiResponse.success(admin.templateAction(shopId, templateId, action, r.reason(), r.version(), key));
     }
 
+    @PostMapping("/coupon-templates/{templateId}/archive")
+    public ApiResponse<CouponTemplateAdminDetailView> archiveTemplate(@PathVariable long shopId, @PathVariable long templateId, @Valid @RequestBody ReasonVersionRequest r, @RequestHeader("Idempotency-Key") String key) {
+        return ApiResponse.success(admin.templateAction(shopId, templateId, "archive", r.reason(), r.version(), key));
+    }
+
     @PostMapping("/coupon-templates/{templateId}/copy")
     public ResponseEntity<ApiResponse<CouponTemplateAdminDetailView>> copy(@PathVariable long shopId, @PathVariable long templateId, @Valid @RequestBody CopyCouponTemplateRequest r, @RequestHeader("Idempotency-Key") String key) {
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.success(admin.copyTemplate(shopId, templateId, r, key)));

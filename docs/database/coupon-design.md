@@ -2,15 +2,16 @@
 
 ## 1. 文档定位与迁移边界
 
-本文定义优惠券增量模块的数据模型、字段语义、金额约束、状态机、事务边界、并发控制和对账规则。现有基线仍由 `sql/schema.sql -> sql/schema2.sql -> sql/scheme3.sql` 构成；本设计不修改这些历史文件。
+本文定义优惠券增量模块的数据模型、字段语义、金额约束、状态机、事务边界、并发控制和对账规则。当前迁移按编号顺序执行，本设计不回写已经发布的历史文件。
 
-正式实现时应新增后续迁移 `sql/scheme4.sql`，执行顺序为：
+当前完整执行顺序为：
 
 ```text
-schema.sql -> schema2.sql -> scheme3.sql -> scheme4.sql
+schema.sql -> schema2.sql -> scheme3.sql -> scheme4.sql -> scheme5.sql
+-> scheme6.sql -> scheme7.sql -> scheme8.sql -> scheme9.sql
 ```
 
-当前提交只新增设计文档，不创建或执行 `scheme4.sql`。后续迁移必须以本文为依据，使用 `CREATE TABLE IF NOT EXISTS`、可验证的回填步骤和明确的约束替换，不得回写已发布脚本。
+优惠券主体由 `scheme6.sql` 创建，周期抢券规则由 `scheme8.sql` 增加，模板归档状态由 `scheme9.sql` 扩展检查约束。后续迁移必须使用新的递增脚本，不得回写这些已发布文件。
 
 本设计继承：
 
@@ -19,7 +20,7 @@ schema.sql -> schema2.sql -> scheme3.sql -> scheme4.sql
 - [优惠券产品需求](../product/coupon-requirements.md)中的券种、叠加、返券和用户体验规则；
 - [优惠券 API 设计](../api/coupon-api.md)中的外部字段、状态和错误语义。
 
-如本文与旧数据库文档在“优惠后订单金额”上存在差异，仅在 `scheme4.sql` 成功安装后使用本文第 12 节的新公式；历史无券交易通过 `coupon_discount_amount=0.00` 保持原等式。
+如本文与旧数据库文档在“优惠后订单金额”上存在差异，仅在优惠券主体迁移 `scheme6.sql` 成功安装后使用本文第 12 节的新公式；历史无券交易通过 `coupon_discount_amount=0.00` 保持原等式。
 
 ## 2. 设计原则
 
@@ -176,12 +177,14 @@ erDiagram
 | `budget_reserved_amount` | `DECIMAL(18,2)`，非空，默认 `0.00` | 已发行未最终消耗用户券的当前最大责任预占 |
 | `budget_consumed_amount` | `DECIMAL(18,2)`，非空，默认 `0.00` | 支付核销产生的累计实际优惠 |
 | `budget_reversed_amount` | `DECIMAL(18,2)`，非空，默认 `0.00` | 全额退款冲回的累计实际优惠 |
-| `status` | `VARCHAR(20)`，非空，默认 `DRAFT` | `DRAFT`、`ACTIVE`、`PAUSED`、`ENDED` |
+| `status` | `VARCHAR(20)`，非空，默认 `DRAFT` | `DRAFT`、`ACTIVE`、`PAUSED`、`ENDED`、`ARCHIVED` |
 | `first_issued_at` | `DATETIME(3)`，可空 | 第一张用户券创建时间；非空后经济字段冻结 |
 | `sort_order` | `INT`，非空，默认 `0` | 活动内排序，越小越靠前 |
 | `created_by`、`updated_by` | `BIGINT UNSIGNED`，非空，外键 | 操作者 |
 | `version` | `INT UNSIGNED`，非空，默认 `0` | 乐观锁和计数更新版本 |
 | `created_at`、`updated_at` | `DATETIME(3)`，非空 | 审计时间 |
+
+`ARCHIVED` 表示从默认管理列表隐藏但继续保留历史业务事实，只允许 `DRAFT/ENDED -> ARCHIVED`。它不是逻辑删除标记，不使用全局查询拦截器；用户券使用、退款返券、预算和对账仍需读取归档模板及范围。迁移 `scheme9.sql` 只替换 `chk_coupon_template_status`，不回写历史状态。
 
 券种 `CHECK`：
 
@@ -572,7 +575,7 @@ coupon_discount_reversal_amount
 | `id` | `BIGINT UNSIGNED`，主键，自增 | 日志 ID |
 | `resource_type` | `VARCHAR(24)`，非空 | `ACTIVITY`、`TEMPLATE`、`FUNDING_PARTICIPATION`、`USER_COUPON`、`REDEEM_CODE_BATCH` |
 | `resource_id` | `BIGINT UNSIGNED`，非空 | 资源 ID；多态引用由应用校验 |
-| `operation_type` | `VARCHAR(32)`，非空 | `CREATE`、`UPDATE`、`PUBLISH`、`PAUSE`、`RESUME`、`END`、`CANCEL`、`GRANT`、`REVOKE`、`GOVERNANCE_PAUSE` 等 |
+| `operation_type` | `VARCHAR(32)`，非空 | `CREATE`、`UPDATE`、`PUBLISH`、`PAUSE`、`RESUME`、`END`、`ARCHIVE`、`CANCEL`、`GRANT`、`REVOKE`、`GOVERNANCE_PAUSE` 等 |
 | `operator_type` | `VARCHAR(16)`，非空 | `USER`、`SHOP`、`PLATFORM`、`SYSTEM` |
 | `operator_id` | `BIGINT UNSIGNED`，可空，外键 | 系统动作为空，人工动作必填 |
 | `shop_id` | `BIGINT UNSIGNED`，可空，外键 | 店铺作用域日志冗余列 |
@@ -736,7 +739,7 @@ refunded_amount <= payable_amount
 
 ### 12.4 约束迁移步骤
 
-由于 MySQL DDL 隐式提交，`scheme4.sql` 必须分阶段执行并在每步后验证：
+由于 MySQL DDL 隐式提交，优惠券主体迁移 `scheme6.sql` 必须分阶段执行并在每步后验证：
 
 1. 新增允许为空的列。
 2. 回填历史记录。
@@ -959,7 +962,7 @@ shop_settlement.shop_coupon_discount_amount
 
 ## 19. 数据保留与安全
 
-- 活动、模板、用户券、领取、兑换码元数据、核销、分摊、预算和操作日志不物理删除。
+- 活动、模板、用户券、领取、兑换码元数据、核销、分摊、预算和操作日志不物理删除；废弃模板使用 `ARCHIVED` 隐藏。
 - 明文兑换码只在生成响应中出现一次；服务日志、审计 JSON、错误详情和数据库均不得保存。
 - 用户券列表和报表按用户/店铺/平台作用域查询；店铺 SQL 必须包含 `owner_shop_id` 或分摊 `shop_id`。
 - 平台跨店只读查询需要独立权限，不因能够按 ID 查到记录就允许修改。
@@ -967,7 +970,7 @@ shop_settlement.shop_coupon_discount_amount
 
 ## 20. 实现前数据库检查清单
 
-1. `scheme4.sql` 是否只追加迁移，没有改写历史脚本。
+1. 新迁移是否只追加到当前最新的 `scheme9.sql` 之后，没有改写历史脚本。
 2. 新列是否先回填再设非空，新约束是否在全表验证后启用。
 3. 所有 ID 外部只在 `Long.MAX_VALUE` 范围，所有金额为两位 `DECIMAL`。
 4. 活动、模板、用户券、核销和预算状态是否都有 `CHECK` 或唯一保护。
